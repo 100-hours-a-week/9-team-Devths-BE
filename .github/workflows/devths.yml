@@ -1,13 +1,16 @@
-name: Devths-BE CI 파이프라인
+name: Devths-BE CICD 파이프라인
 
 # dev/release/main 모두 진행
 on:
-  pull_request:
+  push:
     branches: [develop, release, main]
 
 # ENV 설정
 env:
   JAVA_VERSION: "21"
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
+  S3_PREFIX: ci/${{ github.repository }}/${{ github.ref_name }}/${{ github.run_id }}_${{ github.sha }}
 
 jobs:
   # Lint 설정
@@ -41,7 +44,7 @@ jobs:
           path: '**/build/reports/checkstyle/*.xml'
           title: 'Checkstyle 결과 Report'
 
-  # CodeQL 기반 코드 정적 분석 실행
+    # CodeQL 기반 코드 정적 분석 실행
   static_analysis:
     name: static-analysis
     needs: [ lint ]
@@ -85,7 +88,7 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-22.04
-    needs: [static_analysis] # 테스트 통과 후 빌드
+    needs: [ static_analysis ] # 테스트 통과 후 빌드
     steps:
       - name: 체크아웃
         uses: actions/checkout@v4
@@ -100,6 +103,31 @@ jobs:
       - name: 자바 빌드
         run: ./gradlew clean build -x test
 
+      - name: AWS 자격 증명 설정
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{secrets.AWS_ACCESS_KEY}}
+          aws-secret-access-key: ${{secrets.AWS_SECRET_KEY}}
+          aws-region: ${{secrets.AWS_REGION}}
+
+      - name: JAR을 S3 업로드
+        run: |
+          set -euo pipefail
+          DEST="s3://${S3_BUCKET}/${S3_PREFIX}/artifacts/jar"
+          mkdir -p /tmp/jars
+
+          # build/libs/*.jar 업로드 (여러 개일 수 있어 for 처리)
+          shopt -s nullglob
+          files=(build/libs/*.jar)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No jar found in build/libs"
+            exit 1
+          fi
+
+          for f in "${files[@]}"; do
+            aws s3 cp "$f" "${DEST}/$(basename "$f")" --only-show-errors
+          done
+
   # 디스코드 알람 제공
   notify-discord:
     name: notify
@@ -107,66 +135,43 @@ jobs:
     needs: [lint, static_analysis, build]
     if: always()
     steps:
-      - name: 데이터 준비 (JSON 기반 매핑 및 리뷰어 추출)
+      - name: 데이터 준비
         id: prep
         env:
           USER_MAP: ${{ secrets.USER_MAP_JSON }}
         run: |
-          # 1. 작성자 매핑
-          LOGIN_ID="${{ github.event.pull_request.user.login }}"
-          # JSON에서 해당 ID의 값을 가져옴
+          # 1. 작성자 매핑 (Push를 발생시킨 행위자: github.actor)
+          LOGIN_ID="${{ github.actor }}"
           AUTHOR_MAPPED=$(echo "$USER_MAP" | jq -r --arg id "$LOGIN_ID" '.[$id] // $id')
           echo "author=$AUTHOR_MAPPED" >> $GITHUB_OUTPUT
 
-          # 2. 코드 리뷰어 추출 및 매핑
-          RAW_REVIEWERS=$(echo '${{ toJson(github.event.pull_request.requested_reviewers) }}' | jq -r '.[].login')
-          MAPPED_REVIEWERS=""
-          
-          for LOGIN in $RAW_REVIEWERS; do
-            # JSON에서 매핑된 값 가져오기
-            M_NAME=$(echo "$USER_MAP" | jq -r --arg id "$LOGIN" '.[$id] // $id')
-            if [ -z "$MAPPED_REVIEWERS" ]; then
-              MAPPED_REVIEWERS="$M_NAME"
-            else
-              MAPPED_REVIEWERS="$MAPPED_REVIEWERS, $M_NAME"
-            fi
-          done
+          # 2. 커밋 메시지 추출 (Push 제목 대용)
+          COMMIT_MSG=$(echo "${{ github.event.head_commit.message }}" | head -n 1)
+          echo "title=$COMMIT_MSG" >> $GITHUB_OUTPUT
 
-          if [ -z "$MAPPED_REVIEWERS" ]; then MAPPED_REVIEWERS="지정 안 됨"; fi
-          echo "reviewers=$MAPPED_REVIEWERS" >> $GITHUB_OUTPUT
-
-          # 3. PR 내용 요약 (100자 제한)
-          PR_BODY=$(cat << 'EOF' | head -c 100
-          ${{ github.event.pull_request.body }}
-          EOF
-          )
-          PR_BODY="${PR_BODY//$'\n'/' '}"
-          echo "pr_body=$PR_BODY" >> $GITHUB_OUTPUT
+          # 3. 브랜치 정보
+          echo "branch=${{ github.ref_name }}" >> $GITHUB_OUTPUT
 
       - name: Discord 빌드 알림
         uses: sarisia/actions-status-discord@v1
         with:
-          # 전체 성공 여부 판단
           status: ${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && 'success' || 'failure' }}
-          webhook: ${{ github.event.pull_request.base.ref == 'main' && secrets.DISCORD_WEBHOOK_PROD_URL || secrets.DISCORD_WEBHOOK_NON_PROD_URL }}
-          title: "${{ github.event.pull_request.base.ref }} PR [${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && '✅성공' || '❌실패' }}]"
+          # 타겟 브랜치에 따른 웹훅 분기
+          webhook: ${{ github.ref_name == 'main' && secrets.DISCORD_WEBHOOK_PROD_URL || secrets.DISCORD_WEBHOOK_NON_PROD_URL }}
+          title: "${{ steps.prep.outputs.branch }} 결과 [${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && '✅성공' || '❌실패' }}]"
           description: |
-            **PR 제목**: ${{ github.event.pull_request.title }}
+            **커밋 메시지**: ${{ steps.prep.outputs.title }}
             **작성자**: ${{ steps.prep.outputs.author }}
-            **리뷰어 요청**: ${{ steps.prep.outputs.reviewers }}
-            **경로**: `${{ github.event.pull_request.head.ref }}` → `${{ github.event.pull_request.base.ref }}`
-            **환경**: ${{ github.event.pull_request.base.ref == 'main' && '🚀 운영(PROD)' || (github.event.pull_request.base.ref == 'release' && '🧪 스테이징(STAGING)' || '🛠️ 개발(DEV)') }}
-            
-            **📝 PR 내용 요약**:
-            > ${{ steps.prep.outputs.pr_body }}...
+            **브랜치**: `${{ steps.prep.outputs.branch }}`
+            **환경**: ${{ github.ref_name == 'main' && '🚀 운영(PROD)' || (github.ref_name == 'release' && '🧪 스테이징(STAGING)' || '🛠️ 개발(DEV)') }}
             
             **📊 상세 결과**:
             - Lint: ${{ needs.lint.result == 'success' && '✅ success' || '❌ failure' }}
             - Static Analysis: ${{ needs.static_analysis.result == 'success' && '✅ success' || '❌ failure' }}
             - Build: ${{ needs.build.result == 'success' && '✅ success' || '❌ failure' }}
             
-            **🔗 링크**: [PR 확인하기](${{ github.event.pull_request.html_url }})
+            **🔗 링크**: [커밋 확인하기](${{ github.event.repository.html_url }}/commit/${{ github.sha }})
 
           color: "${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && 65280 || 16711680 }}"
-          username: GitHub PR Bot
+          username: GitHub Merge Bot
           avatar_url: https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
