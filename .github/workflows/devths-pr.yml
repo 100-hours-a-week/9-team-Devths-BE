@@ -107,23 +107,65 @@ jobs:
     needs: [lint, static_analysis, build]
     if: always()
     steps:
+      - name: 데이터 준비 (JSON 기반 매핑 및 리뷰어 추출)
+        id: prep
+        env:
+          USER_MAP: ${{ secrets.USER_MAP_JSON }}
+        run: |
+          # 1. 작성자 매핑
+          LOGIN_ID="${{ github.event.pull_request.user.login }}"
+          # JSON에서 해당 ID의 값을 가져옴
+          AUTHOR_MAPPED=$(echo '$USER_MAP' | jq -r --arg id "$LOGIN_ID" '.[$id] // $id')
+          echo "author=$AUTHOR_MAPPED" >> $GITHUB_OUTPUT
+
+          # 2. 코드 리뷰어 추출 및 매핑
+          RAW_REVIEWERS=$(echo '${{ toJson(github.event.pull_request.requested_reviewers) }}' | jq -r '.[].login')
+          MAPPED_REVIEWERS=""
+          
+          for LOGIN in $RAW_REVIEWERS; do
+            # JSON에서 매핑된 값 가져오기
+            M_NAME=$(echo '$USER_MAP' | jq -r --arg id "$LOGIN" '.[$id] // $id')
+            if [ -z "$MAPPED_REVIEWERS" ]; then
+              MAPPED_REVIEWERS="$M_NAME"
+            else
+              MAPPED_REVIEWERS="$MAPPED_REVIEWERS, $M_NAME"
+            fi
+          done
+
+          if [ -z "$MAPPED_REVIEWERS" ]; then MAPPED_REVIEWERS="지정 안 됨"; fi
+          echo "reviewers=$MAPPED_REVIEWERS" >> $GITHUB_OUTPUT
+
+          # 3. PR 내용 요약 (100자 제한)
+          PR_BODY=$(cat << 'EOF' | head -c 100
+          ${{ github.event.pull_request.body }}
+          EOF
+          )
+          PR_BODY="${PR_BODY//$'\n'/' '}"
+          echo "pr_body=$PR_BODY" >> $GITHUB_OUTPUT
+
       - name: Discord 빌드 알림
         uses: sarisia/actions-status-discord@v1
         with:
-          # 모든 단계가 성공했을 때만 성공(green)으로 표시
           status: ${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && 'success' || 'failure' }}
-          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          title: "PR 빌드 결과 알림"
+          webhook: ${{ github.event.pull_request.base.ref == 'main' && secrets.DISCORD_WEBHOOK_PROD_URL || secrets.DISCORD_WEBHOOK_NON_PROD_URL }}
+          title: "${{ github.event.pull_request.base.ref }} 병합 [${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && '✅성공' || '❌실패' }}] 되었습니다!"
           description: |
-            **제목**: ${{ github.event.pull_request.title }}
-            **작성자**: ${{ github.event.pull_request.user.login }}
-            **브랜치**: `${{ github.event.pull_request.head.ref }}` → `${{ github.event.pull_request.base.ref }}`
+            **PR 제목**: ${{ github.event.pull_request.title }}
+            **작성자**: ${{ steps.prep.outputs.author }}
+            **리뷰어 요청**: ${{ steps.prep.outputs.reviewers }}
+            **경로**: `${{ github.event.pull_request.head.ref }}` → `${{ github.event.pull_request.base.ref }}`
+            **환경**: ${{ github.event.pull_request.base.ref == 'main' && '🚀 운영(PROD)' || (github.event.pull_request.base.ref == 'release' && '🧪 스테이징(STAGING)' || '🛠️ 개발(DEV)') }}
+            
+            **📝 PR 내용 요약**:
+            > ${{ steps.prep.outputs.pr_body }}...
             
             **📊 상세 결과**:
-            - Lint: `${{ needs.lint.result }}`
-            - Static Analysis: `${{ needs.static_analysis.result }}`
-            - Build: `${{ needs.build.result }}`
+            - Lint: ${{ needs.lint.result == 'success' && '✅ success' || '❌ failure' }}
+            - Static Analysis: ${{ needs.static_analysis.result == 'success' && '✅ success' || '❌ failure' }}
+            - Build: ${{ needs.build.result == 'success' && '✅ success' || '❌ failure' }}
             
             **🔗 링크**: [PR 확인하기](${{ github.event.pull_request.html_url }})
+
+          color: "${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && 65280 || 16711680 }}"
           username: GitHub PR Bot
           avatar_url: https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
