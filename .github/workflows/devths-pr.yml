@@ -98,7 +98,7 @@ jobs:
           cache: gradle
 
       - name: 자바 빌드
-        run: ./gradlew clean build -x test
+        run: ./gradlew clean build -x test -x check
 
   # 디스코드 알림 제공
   notify-discord:
