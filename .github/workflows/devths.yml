@@ -1,0 +1,183 @@
+name: Devths-BE CICD 파이프라인
+
+# dev/release/main 모두 진행
+on:
+  push:
+    branches: [develop, release, main]
+
+# ENV 설정
+env:
+  JAVA_VERSION: "21"
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
+  S3_PREFIX: ci/${{ github.repository }}/${{ github.ref_name }}/${{ github.run_id }}_${{ github.sha }}
+
+jobs:
+  # Lint 설정
+  lint:
+    name: lint
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - name: 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Java 및 Gradle 설치
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Gradle 실행 권한 부여
+        run: chmod +x gradlew
+
+      - name: Lint (CheckStyle) 수행
+        run: ./gradlew checkstyleMain
+
+      - name: Lint (CheckStyle) 결과 리포트
+        uses: lcollins/checkstyle-github-action@v2.0.0
+        if: always()
+        with:
+          path: '**/build/reports/checkstyle/*.xml'
+          title: 'Checkstyle 결과 Report'
+
+    # CodeQL 기반 코드 정적 분석 실행
+  static_analysis:
+    name: static-analysis
+    needs: [ lint ]
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ java-kotlin ]
+    # container 부분은 제거 (GitHub 기본 환경 사용 권장)
+    steps:
+      - name: 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Java 및 Gradle 설치
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'gradle'
+
+      - name: CodeQL 초기화
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Build (Gradle)
+        run: |
+          chmod +x gradlew
+          ./gradlew build -x test
+
+      - name: CodeQL 분석 수행
+        uses: github/codeql-action/analyze@v3
+
+  # 추후 통합 테스트 과정 추가 예정
+
+  # 빌드
+  build:
+    name: build
+    runs-on: ubuntu-22.04
+    needs: [ static_analysis ] # 테스트 통과 후 빌드
+    steps:
+      - name: 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Java 및 Gradle 설치
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: 자바 빌드
+        run: ./gradlew clean build -x test
+
+      - name: AWS 자격 증명 설정
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{secrets.AWS_ACCESS_KEY}}
+          aws-secret-access-key: ${{secrets.AWS_SECRET_KEY}}
+          aws-region: ${{secrets.AWS_REGION}}
+
+      - name: JAR을 S3 업로드
+        run: |
+          set -euo pipefail
+          DEST="s3://${S3_BUCKET}/${S3_PREFIX}/artifacts/jar"
+          mkdir -p /tmp/jars
+
+          # build/libs/*.jar 업로드 (여러 개일 수 있어 for 처리)
+          shopt -s nullglob
+          files=(build/libs/*.jar)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No jar found in build/libs"
+            exit 1
+          fi
+
+          for f in "${files[@]}"; do
+            aws s3 cp "$f" "${DEST}/$(basename "$f")" --only-show-errors
+          done
+
+  # 디스코드 알람 제공
+  notify-discord:
+    name: notify
+    runs-on: ubuntu-22.04
+    needs: [lint, static_analysis, build]
+    if: always()
+    steps:
+      - name: 데이터 준비
+        id: prep
+        env:
+          USER_MAP: ${{ secrets.USER_MAP_JSON }}
+        run: |
+          # 1. 작성자 매핑 및 @멘션만 추출
+          LOGIN_ID="${{ github.event.pull_request.user.login }}"
+          FULL_MAPPED=$(echo "$USER_MAP" | jq -r --arg id "$LOGIN_ID" '.[$id] // $id')
+          
+          if [[ $FULL_MAPPED =~ (<@[0-9]+>) ]]; then
+            AUTHOR_TAG="${BASH_REMATCH[1]}"
+          else
+            AUTHOR_TAG="$FULL_MAPPED"
+          fi
+          echo "author=$AUTHOR_TAG" >> $GITHUB_OUTPUT
+
+          # 2. 커밋 메시지 추출 (Push 제목 대용)
+          COMMIT_MSG=$(echo "${{ github.event.head_commit.message }}" | head -n 1)
+          echo "title=$COMMIT_MSG" >> $GITHUB_OUTPUT
+
+          # 3. 브랜치 정보
+          echo "branch=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+
+      - name: Discord 빌드 알림
+        uses: sarisia/actions-status-discord@v1
+        with:
+          status: ${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && 'success' || 'failure' }}
+          # 타겟 브랜치에 따른 웹훅 분기
+          webhook: ${{ github.ref_name == 'main' && secrets.DISCORD_WEBHOOK_PROD_URL || secrets.DISCORD_WEBHOOK_NON_PROD_URL }}
+          title: "${{ steps.prep.outputs.branch }} 결과 [${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && '✅성공' || '❌실패' }}]"
+          description: |
+            **커밋 메시지**: ${{ steps.prep.outputs.title }}
+            **작성자**: ${{ steps.prep.outputs.author }}
+            **브랜치**: `${{ steps.prep.outputs.branch }}`
+            **환경**: ${{ github.ref_name == 'main' && '🚀 운영(PROD)' || (github.ref_name == 'release' && '🧪 스테이징(STAGING)' || '🛠️ 개발(DEV)') }}
+            
+            **📊 상세 결과**:
+            - Lint: ${{ needs.lint.result == 'success' && '✅ success' || '❌ failure' }}
+            - Static Analysis: ${{ needs.static_analysis.result == 'success' && '✅ success' || '❌ failure' }}
+            - Build: ${{ needs.build.result == 'success' && '✅ success' || '❌ failure' }}
+            
+            **🔗 링크**: [커밋 확인하기](${{ github.event.repository.html_url }}/commit/${{ github.sha }})
+
+          color: "${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && 65280 || 16711680 }}"
+          username: GitHub Merge Bot
+          avatar_url: https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
