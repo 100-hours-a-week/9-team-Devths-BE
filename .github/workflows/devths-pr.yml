@@ -1,0 +1,166 @@
+name: Devths-BE CI 파이프라인
+
+# dev/release/main 모두 진행
+on:
+  pull_request:
+    branches: [develop, release, main]
+
+# ENV 설정
+env:
+  JAVA_VERSION: "21"
+
+jobs:
+  # Lint 설정
+  lint:
+    name: lint
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - name: 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Java 및 Gradle 설치
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Gradle 실행 권한 부여
+        run: chmod +x gradlew
+
+      - name: Lint (CheckStyle) 수행
+        run: ./gradlew checkstyleMain
+
+      - name: Lint (CheckStyle) 결과 리포트
+        uses: lcollins/checkstyle-github-action@v2.0.0
+        if: always()
+        with:
+          path: '**/build/reports/checkstyle/*.xml'
+          title: 'Checkstyle 결과 Report'
+
+  # CodeQL 기반 코드 정적 분석 실행
+  static_analysis:
+    name: static-analysis
+    needs: [ lint ]
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ java-kotlin ]
+    # container 부분은 제거 (GitHub 기본 환경 사용 권장)
+    steps:
+      - name: 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Java 및 Gradle 설치
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'gradle'
+
+      - name: CodeQL 초기화
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Build (Gradle)
+        run: |
+          chmod +x gradlew
+          ./gradlew build -x test -x check
+
+      - name: CodeQL 분석 수행
+        uses: github/codeql-action/analyze@v3
+
+  # 추후 통합 테스트 과정 추가 예정
+
+  # 빌드
+  build:
+    name: build
+    runs-on: ubuntu-22.04
+    needs: [static_analysis] # 테스트 통과 후 빌드
+    steps:
+      - name: 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Java 및 Gradle 설치
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: 자바 빌드
+        run: ./gradlew clean build -x test -x check
+
+  # 디스코드 알림 제공
+  notify-discord:
+    name: notify
+    runs-on: ubuntu-22.04
+    needs: [lint, static_analysis, build]
+    if: always()
+    steps:
+      - name: 데이터 준비
+        id: prep
+        env:
+          USER_MAP: ${{ secrets.USER_MAP_JSON }}
+        run: |
+          # 1. 작성자 매핑
+          LOGIN_ID="${{ github.event.pull_request.user.login }}"
+          AUTHOR_TAG=$(echo "$USER_MAP" | jq -r --arg id "$LOGIN_ID" '.[$id] // $id')
+          echo "author=$AUTHOR_TAG" >> $GITHUB_OUTPUT
+
+          # 2. 리뷰어 매핑 
+          # jq를 사용하여 리뷰어 login 리스트를 가져온 뒤, MAP에서 찾아 디스코드 멘션으로 변환
+          REVIEWERS_JSON='${{ toJson(github.event.pull_request.requested_reviewers) }}'
+          REVIEWER_TAGS=$(echo "$REVIEWERS_JSON" | jq -r --argjson map "$USER_MAP" '
+            [.[].login | ($map[.] // .)] | join(", ")
+          ')
+          echo "reviewers=${REVIEWER_TAGS:-없음}" >> $GITHUB_OUTPUT
+
+          # 3. 작업 내용 추출 (HTML 주석 제거 로직 반영)
+          PR_RAW_BODY=$(cat << 'EOF'
+          ${{ github.event.pull_request.body }}
+          EOF
+          )
+          
+          # 필요없는 문구 삭제
+          DESC=$(echo "$PR_RAW_BODY" | \
+            perl -0777 -pe 's///gs' | \
+            sed 's/이 PR에서 변경된 내용을 간략히 작성해주세요\.//g' | \
+            sed -n '/## 📌 작업한 내용/,/## 🔍 참고 사항/p' | \
+            sed '1d;$d' | \
+            xargs | \
+            head -c 300)
+          
+          echo "description=${DESC:-내용 없음}" >> $GITHUB_OUTPUT
+
+      - name: Discord 빌드 알림
+        uses: sarisia/actions-status-discord@v1
+        with:
+          status: ${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && 'success' || 'failure' }}
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          title: "${{ github.event.pull_request.base.ref }} PR [${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && '✅성공' || '❌실패' }}]"
+          description: |
+            **PR 제목**: ${{ github.event.pull_request.title }}
+            **작성자**: ${{ steps.prep.outputs.author }}
+            **리뷰어**: ${{ steps.prep.outputs.reviewers }}
+            **작업 내용**: ${{ steps.prep.outputs.description }}...
+            **경로**: `${{ github.event.pull_request.head.ref }}` → `${{ github.event.pull_request.base.ref }}`
+            
+            **📊 상세 결과**:
+            - Lint: ${{ needs.lint.result == 'success' && ' ✅' || ' ❌' }}
+            - Static Analysis: ${{ needs.static_analysis.result == 'success' && ' ✅' || ' ❌' }}
+            - Build: ${{ needs.build.result == 'success' && ' ✅' || ' ❌' }}
+            
+            **🔗 링크**: [PR 확인하기](${{ github.event.pull_request.html_url }})
+          color: "${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && 65280 || 16711680 }}"
+          username: GitHub PR Bot
+          avatar_url: https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
