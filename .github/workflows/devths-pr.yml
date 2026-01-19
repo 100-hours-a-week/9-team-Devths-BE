@@ -32,7 +32,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Lint (CheckStyle) 수행
-        run: ./gradlew checkstyleMain
+        run: ./gradlew checkstyleMain checkstyleTest
 
       - name: Lint (CheckStyle) 결과 리포트
         uses: lcollins/checkstyle-github-action@v2.0.0
@@ -74,7 +74,7 @@ jobs:
       - name: Build (Gradle)
         run: |
           chmod +x gradlew
-          ./gradlew build -x test
+          ./gradlew build -x test -x check
 
       - name: CodeQL 분석 수행
         uses: github/codeql-action/analyze@v3
@@ -125,19 +125,22 @@ jobs:
           ')
           echo "reviewers=${REVIEWER_TAGS:-없음}" >> $GITHUB_OUTPUT
 
-          # 3. 작업 내용 추출 (HTML 주석 제거 및 범위 지정)
+          # 3. 작업 내용 추출 (HTML 주석 및 특정 가이드 문구 완벽 제거)
           PR_RAW_BODY=$(cat << 'EOF'
           ${{ github.event.pull_request.body }}
           EOF
           )
           
+          # 필요없는 문구 삭제          
           DESC=$(echo "$PR_RAW_BODY" | \
           perl -0777 -pe 's///gs' | \
+          sed 's/이 PR에서 변경된 내용을 간략히 작성해주세요\.//g' | \
           sed -n '/## 📌 작업한 내용/,/## 🔍 참고 사항/p' | \
           sed '1d;$d' | \
           xargs | \
           head -c 300)
           
+          # 내용이 비어있을 경우 예외 처리
           echo "description=${DESC:-내용 없음}" >> $GITHUB_OUTPUT
 
       - name: Discord 빌드 알림
