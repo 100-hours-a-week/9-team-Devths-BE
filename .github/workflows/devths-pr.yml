@@ -100,7 +100,7 @@ jobs:
       - name: 자바 빌드
         run: ./gradlew clean build -x test
 
-  # 디스코드 알람 제공
+  # 디스코드 알림 제공
   notify-discord:
     name: notify
     runs-on: ubuntu-22.04
@@ -112,26 +112,25 @@ jobs:
         env:
           USER_MAP: ${{ secrets.USER_MAP_JSON }}
         run: |
-          # 1. 작성자 매핑 및 @멘션만 추출
+          # 1. 작성자 매핑
           LOGIN_ID="${{ github.event.pull_request.user.login }}"
-          FULL_MAPPED=$(echo "$USER_MAP" | jq -r --arg id "$LOGIN_ID" '.[$id] // $id')
-          
-          if [[ $FULL_MAPPED =~ (<@[0-9]+>) ]]; then
-            AUTHOR_TAG="${BASH_REMATCH[1]}"
-          else
-            AUTHOR_TAG="$FULL_MAPPED"
-          fi
+          AUTHOR_TAG=$(echo "$USER_MAP" | jq -r --arg id "$LOGIN_ID" '.[$id] // $id')
           echo "author=$AUTHOR_TAG" >> $GITHUB_OUTPUT
 
-          # 2. "## 📌 작업한 내용" ~ "## 🔍 참고 사항" 사이만 추출
+          # 2. 리뷰어 매핑 
+          # jq를 사용하여 리뷰어 login 리스트를 가져온 뒤, MAP에서 찾아 디스코드 멘션으로 변환
+          REVIEWERS_JSON='${{ toJson(github.event.pull_request.requested_reviewers) }}'
+          REVIEWER_TAGS=$(echo "$REVIEWERS_JSON" | jq -r --argjson map "$USER_MAP" '
+            [.[].login | ($map[.] // .)] | join(", ")
+          ')
+          echo "reviewers=${REVIEWER_TAGS:-없음}" >> $GITHUB_OUTPUT
+
+          # 3. 작업 내용 추출 (HTML 주석 제거 및 범위 지정)
           PR_RAW_BODY=$(cat << 'EOF'
           ${{ github.event.pull_request.body }}
           EOF
           )
           
-          # 1. HTML 주석 제거
-          # 2. '📌 작업한 내용'부터 '🔍 참고 사항' 전까지만 추출
-          # 3. 앞뒤 공백 제거 및 300자 제한
           DESC=$(echo "$PR_RAW_BODY" | \
           perl -0777 -pe 's///gs' | \
           sed -n '/## 📌 작업한 내용/,/## 🔍 참고 사항/p' | \
@@ -139,7 +138,6 @@ jobs:
           xargs | \
           head -c 300)
           
-          # 내용이 비어있을 경우 예외 처리
           echo "description=${DESC:-내용 없음}" >> $GITHUB_OUTPUT
 
       - name: Discord 빌드 알림
@@ -151,6 +149,7 @@ jobs:
           description: |
             **PR 제목**: ${{ github.event.pull_request.title }}
             **작성자**: ${{ steps.prep.outputs.author }}
+            **리뷰어**: ${{ steps.prep.outputs.reviewers }}
             **작업 내용**: ${{ steps.prep.outputs.description }}...
             **경로**: `${{ github.event.pull_request.head.ref }}` → `${{ github.event.pull_request.base.ref }}`
             
@@ -160,7 +159,4 @@ jobs:
             - Build: ${{ needs.build.result == 'success' && ' ✅' || ' ❌' }}
             
             **🔗 링크**: [PR 확인하기](${{ github.event.pull_request.html_url }})
-
           color: "${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && 65280 || 16711680 }}"
-          username: GitHub PR Bot
-          avatar_url: https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
