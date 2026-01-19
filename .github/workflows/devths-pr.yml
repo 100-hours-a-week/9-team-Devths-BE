@@ -107,63 +107,51 @@ jobs:
     needs: [lint, static_analysis, build]
     if: always()
     steps:
-      - name: 데이터 준비 (JSON 기반 매핑 및 리뷰어 추출)
+      - name: 데이터 준비 (JSON 기반 매핑 및 작업 내용 추출)
         id: prep
         env:
           USER_MAP: ${{ secrets.USER_MAP_JSON }}
         run: |
-          # 1. 작성자 매핑
+          # 1. 작성자 매핑 및 @멘션만 추출
           LOGIN_ID="${{ github.event.pull_request.user.login }}"
-          # JSON에서 해당 ID의 값을 가져옴
-          AUTHOR_MAPPED=$(echo "$USER_MAP" | jq -r --arg id "$LOGIN_ID" '.[$id] // $id')
-          echo "author=$AUTHOR_MAPPED" >> $GITHUB_OUTPUT
-
-          # 2. 코드 리뷰어 추출 및 매핑
-          RAW_REVIEWERS=$(echo '${{ toJson(github.event.pull_request.requested_reviewers) }}' | jq -r '.[].login')
-          MAPPED_REVIEWERS=""
+          FULL_MAPPED=$(echo "$USER_MAP" | jq -r --arg id "$LOGIN_ID" '.[$id] // $id')
           
-          for LOGIN in $RAW_REVIEWERS; do
-            # JSON에서 매핑된 값 가져오기
-            M_NAME=$(echo "$USER_MAP" | jq -r --arg id "$LOGIN" '.[$id] // $id')
-            if [ -z "$MAPPED_REVIEWERS" ]; then
-              MAPPED_REVIEWERS="$M_NAME"
-            else
-              MAPPED_REVIEWERS="$MAPPED_REVIEWERS, $M_NAME"
-            fi
-          done
+          if [[ $FULL_MAPPED =~ (<@[0-9]+>) ]]; then
+            AUTHOR_TAG="${BASH_REMATCH[1]}"
+          else
+            AUTHOR_TAG="$FULL_MAPPED"
+          fi
+          echo "author=$AUTHOR_TAG" >> $GITHUB_OUTPUT
 
-          if [ -z "$MAPPED_REVIEWERS" ]; then MAPPED_REVIEWERS="지정 안 됨"; fi
-          echo "reviewers=$MAPPED_REVIEWERS" >> $GITHUB_OUTPUT
-
-          # 3. PR 내용 요약 (100자 제한)
-          PR_BODY=$(cat << 'EOF' | head -c 100
+          # 2. "## 📌 작업한 내용" 섹션 추출 및 50자 제한
+          PR_RAW_BODY=$(cat << 'EOF'
           ${{ github.event.pull_request.body }}
           EOF
           )
-          PR_BODY="${PR_BODY//$'\n'/' '}"
-          echo "pr_body=$PR_BODY" >> $GITHUB_OUTPUT
+
+          # '작업한 내용' 섹션부터 다음 헤더(##) 전까지의 내용을 추출
+          # sed 설명: '## 📌 작업한 내용' 줄을 찾으면 그 다음 줄부터 읽기 시작해서 다시 '##'가 나오면 멈춤
+          DESC=$(echo "$PR_RAW_BODY" | sed -n '/## 📌 작업한 내용/,/##/p' | sed '1d;$d' | xargs | head -c 50)
+          
+          # 내용이 비어있을 경우 예외 처리
+          echo "description=${DESC:-내용 없음}" >> $GITHUB_OUTPUT
 
       - name: Discord 빌드 알림
         uses: sarisia/actions-status-discord@v1
         with:
-          # 전체 성공 여부 판단
           status: ${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && 'success' || 'failure' }}
-          webhook: ${{ github.event.pull_request.base.ref == 'main' && secrets.DISCORD_WEBHOOK_PROD_URL || secrets.DISCORD_WEBHOOK_NON_PROD_URL }}
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
           title: "${{ github.event.pull_request.base.ref }} PR [${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && '✅성공' || '❌실패' }}]"
           description: |
             **PR 제목**: ${{ github.event.pull_request.title }}
             **작성자**: ${{ steps.prep.outputs.author }}
-            **리뷰어 요청**: ${{ steps.prep.outputs.reviewers }}
+            **작업 내용**: ${{ steps.prep.outputs.description }}...
             **경로**: `${{ github.event.pull_request.head.ref }}` → `${{ github.event.pull_request.base.ref }}`
-            **환경**: ${{ github.event.pull_request.base.ref == 'main' && '🚀 운영(PROD)' || (github.event.pull_request.base.ref == 'release' && '🧪 스테이징(STAGING)' || '🛠️ 개발(DEV)') }}
-            
-            **📝 PR 내용 요약**:
-            > ${{ steps.prep.outputs.pr_body }}...
             
             **📊 상세 결과**:
-            - Lint: ${{ needs.lint.result == 'success' && '✅ success' || '❌ failure' }}
-            - Static Analysis: ${{ needs.static_analysis.result == 'success' && '✅ success' || '❌ failure' }}
-            - Build: ${{ needs.build.result == 'success' && '✅ success' || '❌ failure' }}
+            - Lint: ${{ needs.lint.result == 'success' && ' ✅' || ' ❌' }}
+            - Static Analysis: ${{ needs.static_analysis.result == 'success' && ' ✅' || ' ❌' }}
+            - Build: ${{ needs.build.result == 'success' && ' ✅' || ' ❌' }}
             
             **🔗 링크**: [PR 확인하기](${{ github.event.pull_request.html_url }})
 
