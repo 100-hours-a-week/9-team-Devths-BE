@@ -14,17 +14,17 @@ import lombok.extern.slf4j.Slf4j;
 public class GlobalExceptionHandler {
 
 	@ExceptionHandler(CustomException.class)
-	public ResponseEntity<ApiResponse<Void>> handleCustomException(CustomException e) {
-		log.error("CustomException: {}", e.getMessage());
-		ErrorCode errorCode = e.getErrorCode();
+	public ResponseEntity<ApiResponse<Void>> handleCustomException(CustomException ex) {
+		log.error("CustomException: {}", ex.getMessage());
+		ErrorCode errorCode = ex.getErrorCode();
 		return ResponseEntity
 			.status(errorCode.getStatus())
 			.body(ApiResponse.error(errorCode));
 	}
 
 	@ExceptionHandler(Exception.class)
-	public ResponseEntity<ApiResponse<Void>> handleException(Exception e) {
-		log.error("Unhandled Exception: ", e);
+	public ResponseEntity<ApiResponse<Void>> handleException(Exception ex) {
+		log.error("Unhandled Exception: ", ex);
 		return ResponseEntity
 			.status(ErrorCode.INTERNAL_SERVER_ERROR.getStatus())
 			.body(ApiResponse.error(ErrorCode.INTERNAL_SERVER_ERROR));
