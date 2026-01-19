@@ -44,7 +44,7 @@ jobs:
           path: '**/build/reports/checkstyle/*.xml'
           title: 'Checkstyle 결과 Report'
 
-    # CodeQL 기반 코드 정적 분석 실행
+  # CodeQL 기반 코드 정적 분석 실행
   static_analysis:
     name: static-analysis
     needs: [ lint ]
@@ -77,7 +77,7 @@ jobs:
       - name: Build (Gradle)
         run: |
           chmod +x gradlew
-          ./gradlew build -x test
+          ./gradlew build -x test -x check
 
       - name: CodeQL 분석 수행
         uses: github/codeql-action/analyze@v3
@@ -88,7 +88,7 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-22.04
-    needs: [ static_analysis ] # 테스트 통과 후 빌드
+    needs: [static_analysis] # 테스트 통과 후 빌드
     steps:
       - name: 체크아웃
         uses: actions/checkout@v4
@@ -101,7 +101,7 @@ jobs:
           cache: gradle
 
       - name: 자바 빌드
-        run: ./gradlew clean build -x test
+        run: ./gradlew clean build -x test -x check
 
       - name: AWS 자격 증명 설정
         uses: aws-actions/configure-aws-credentials@v4
