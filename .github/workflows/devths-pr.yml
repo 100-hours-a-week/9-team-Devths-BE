@@ -107,7 +107,7 @@ jobs:
     needs: [lint, static_analysis, build]
     if: always()
     steps:
-      - name: 데이터 준비 (JSON 기반 매핑 및 작업 내용 추출)
+      - name: 데이터 준비
         id: prep
         env:
           USER_MAP: ${{ secrets.USER_MAP_JSON }}
@@ -123,15 +123,21 @@ jobs:
           fi
           echo "author=$AUTHOR_TAG" >> $GITHUB_OUTPUT
 
-          # 2. "## 📌 작업한 내용" 섹션 추출 및 50자 제한
+          # 2. "## 📌 작업한 내용" ~ "## 🔍 참고 사항" 사이만 추출
           PR_RAW_BODY=$(cat << 'EOF'
           ${{ github.event.pull_request.body }}
           EOF
           )
-
-          # '작업한 내용' 섹션부터 다음 헤더(##) 전까지의 내용을 추출
-          # sed 설명: '## 📌 작업한 내용' 줄을 찾으면 그 다음 줄부터 읽기 시작해서 다시 '##'가 나오면 멈춤
-          DESC=$(echo "$PR_RAW_BODY" | sed -n '/## 📌 작업한 내용/,/##/p' | sed '1d;$d' | xargs | head -c 50)
+          
+          # 1. HTML 주석 제거
+          # 2. '📌 작업한 내용'부터 '🔍 참고 사항' 전까지만 추출
+          # 3. 앞뒤 공백 제거 및 300자 제한
+          DESC=$(echo "$PR_RAW_BODY" | \
+          perl -0777 -pe 's///gs' | \
+          sed -n '/## 📌 작업한 내용/,/## 🔍 참고 사항/p' | \
+          sed '1d;$d' | \
+          xargs | \
+          head -c 300)
           
           # 내용이 비어있을 경우 예외 처리
           echo "description=${DESC:-내용 없음}" >> $GITHUB_OUTPUT

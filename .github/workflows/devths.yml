@@ -140,10 +140,16 @@ jobs:
         env:
           USER_MAP: ${{ secrets.USER_MAP_JSON }}
         run: |
-          # 1. 작성자 매핑 (Push를 발생시킨 행위자: github.actor)
-          LOGIN_ID="${{ github.actor }}"
-          AUTHOR_MAPPED=$(echo "$USER_MAP" | jq -r --arg id "$LOGIN_ID" '.[$id] // $id')
-          echo "author=$AUTHOR_MAPPED" >> $GITHUB_OUTPUT
+          # 1. 작성자 매핑 및 @멘션만 추출
+          LOGIN_ID="${{ github.event.pull_request.user.login }}"
+          FULL_MAPPED=$(echo "$USER_MAP" | jq -r --arg id "$LOGIN_ID" '.[$id] // $id')
+          
+          if [[ $FULL_MAPPED =~ (<@[0-9]+>) ]]; then
+            AUTHOR_TAG="${BASH_REMATCH[1]}"
+          else
+            AUTHOR_TAG="$FULL_MAPPED"
+          fi
+          echo "author=$AUTHOR_TAG" >> $GITHUB_OUTPUT
 
           # 2. 커밋 메시지 추출 (Push 제목 대용)
           COMMIT_MSG=$(echo "${{ github.event.head_commit.message }}" | head -n 1)
