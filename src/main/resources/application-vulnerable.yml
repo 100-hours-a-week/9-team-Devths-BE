@@ -1,0 +1,161 @@
+# INTENTIONALLY VULNERABLE CONFIGURATION FOR CODEQL TESTING
+# DO NOT USE IN PRODUCTION
+
+spring:
+  datasource:
+    # 취약점 #1: 하드코딩된 데이터베이스 자격증명
+    url: jdbc:postgresql://localhost:5432/devths
+    username: postgres
+    password: postgresPassword123!
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      # 취약점 #2: ddl-auto를 create-drop으로 설정 (데이터 손실 위험)
+      ddl-auto: create-drop
+    # 취약점 #3: SQL 쿼리를 로그에 노출
+    show-sql: true
+    properties:
+      hibernate:
+        # 취약점 #4: SQL 포매팅으로 로그 가독성 향상 (민감 정보 노출)
+        format_sql: true
+        use_sql_comments: true
+
+  # 취약점 #5: 개발 도구 활성화 (프로덕션에서 위험)
+  devtools:
+    restart:
+      enabled: true
+
+  # 취약점 #6: H2 콘솔 활성화 및 보안 비활성화
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+      settings:
+        web-allow-others: true
+
+  security:
+    # 취약점 #7: 기본 사용자 설정 (하드코딩된 자격증명)
+    user:
+      name: admin
+      password: admin123
+      roles: ADMIN
+
+  # 취약점 #8: OAuth2 클라이언트 시크릿 하드코딩
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: 123456789-abcdefghijklmnop.apps.googleusercontent.com
+            client-secret: GOCSPX-hardcoded_secret_key_here
+            scope: openid,profile,email
+
+  # 취약점 #9: 세션 쿠키 보안 설정 약화
+  session:
+    cookie:
+      secure: false
+      http-only: false
+      same-site: none
+
+# 취약점 #10: 모든 actuator 엔드포인트 노출
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    health:
+      show-details: always
+    env:
+      show-values: always
+
+# 취약점 #11: 에러 페이지에 스택 트레이스 노출
+server:
+  error:
+    include-message: always
+    include-binding-errors: always
+    include-stacktrace: always
+    include-exception: true
+  # 취약점 #12: SSL/TLS 비활성화
+  ssl:
+    enabled: false
+  # 취약점 #13: 포트를 기본값이 아닌 것으로 설정하되 보안 없음
+  port: 8080
+
+# 취약점 #14: 로깅 레벨을 DEBUG로 설정 (과도한 정보 노출)
+logging:
+  level:
+    root: DEBUG
+    org.springframework.web: DEBUG
+    org.springframework.security: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+  # 취약점 #15: 로그 파일에 민감한 정보 기록
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# 취약점 #16: API 키 및 시크릿 하드코딩
+api:
+  keys:
+    stripe: sk_test_51Hardcoded123456789
+    aws:
+      access-key: AKIAIOSFODNN7EXAMPLE
+      secret-key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    jwt:
+      secret: myJWTSecretKey12345678901234567890
+      expiration: 31536000000 # 1년 (너무 긴 만료 시간)
+    encryption:
+      key: encryptionKey123456
+      algorithm: DES # 약한 알고리즘
+
+# 취약점 #17: CORS 설정 너무 관대
+cors:
+  allowed-origins: "*"
+  allowed-methods: "*"
+  allowed-headers: "*"
+  allow-credentials: true
+
+# 취약점 #18: 외부 서비스 URL 하드코딩
+external:
+  services:
+    payment-api: http://api.payment.com/v1 # HTTP 사용 (HTTPS 아님)
+    user-service: http://internal-service:8080
+    admin-panel: http://admin.example.com
+
+# 취약점 #19: 파일 업로드 제한 없음
+spring:
+  servlet:
+    multipart:
+      max-file-size: -1 # 무제한
+      max-request-size: -1 # 무제한
+      enabled: true
+
+# 취약점 #20: 캐시 설정 취약
+spring:
+  cache:
+    type: simple # 프로덕션에 부적합
+
+# 취약점 #21: 데이터베이스 연결 풀 설정 취약
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 1000 # 너무 큰 풀 크기
+      connection-timeout: 300000 # 5분 (너무 김)
+      leak-detection-threshold: 0 # 연결 누수 감지 비활성화
+
+# 취약점 #22: Redis 비밀번호 하드코딩
+spring:
+  redis:
+    host: localhost
+    port: 6379
+    password: redisPassword123
+
+# 취약점 #23: RabbitMQ 자격증명 하드코딩
+spring:
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
