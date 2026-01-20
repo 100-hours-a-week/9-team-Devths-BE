@@ -8,13 +8,18 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ktb3.devths.auth.dto.internal.GoogleLoginResult;
+import com.ktb3.devths.auth.dto.internal.TokenPair;
 import com.ktb3.devths.auth.dto.request.GoogleLoginRequest;
 import com.ktb3.devths.auth.dto.response.GoogleLoginResponse;
 import com.ktb3.devths.auth.service.AuthService;
+import com.ktb3.devths.auth.service.JwtTokenService;
 import com.ktb3.devths.auth.util.CookieUtil;
+import com.ktb3.devths.global.exception.CustomException;
 import com.ktb3.devths.global.response.ApiResponse;
+import com.ktb3.devths.global.response.ErrorCode;
 import com.ktb3.devths.global.security.UserPrincipal;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +31,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class AuthController {
 	private final AuthService authService;
+	private final JwtTokenService jwtTokenService;
 
 	/**
 	 * Google OAuth2 로그인
@@ -72,6 +78,35 @@ public class AuthController {
 		// Refresh Token Cookie 삭제
 		response.addCookie(CookieUtil.clearRefreshTokenCookie());
 
-		return ResponseEntity.ok(ApiResponse.success("로그아웃에 성공하였습니다.", null));
+		return ResponseEntity.noContent().build();
+	}
+
+	/**
+	 * 토큰 재발급
+	 */
+	@PostMapping("/tokens")
+	public ResponseEntity<ApiResponse<Void>> refreshTokens(
+		HttpServletRequest request,
+		HttpServletResponse response
+	) {
+		// Cookie에서 Refresh Token 추출
+		String refreshToken = CookieUtil.getRefreshTokenFromCookies(request.getCookies());
+		if (refreshToken == null) {
+			throw new CustomException(ErrorCode.INVALID_REFRESH_TOKEN);
+		}
+
+		// 토큰 재발급
+		TokenPair newTokenPair = jwtTokenService.refreshTokens(refreshToken);
+
+		// Access Token을 Authorization 헤더에 설정
+		response.setHeader("Authorization", "Bearer " + newTokenPair.accessToken());
+
+		// Refresh Token을 HttpOnly Cookie로 설정
+		response.addCookie(CookieUtil.createRefreshTokenCookie(newTokenPair.refreshToken()));
+
+		return ResponseEntity.ok()
+			.header("Access-Control-Expose-Headers", "Authorization")
+			.header("Access-Control-Allow-Credentials", "true")
+			.body(ApiResponse.success("토큰 재발급에 성공하였습니다.", null));
 	}
 }

@@ -39,4 +39,24 @@ public class CookieUtil {
 
 		return cookie;
 	}
+
+	/**
+	 * Cookie 배열에서 Refresh Token 추출
+	 *
+	 * @param cookies Cookie 배열
+	 * @return Refresh Token 값 (없으면 null)
+	 */
+	public static String getRefreshTokenFromCookies(Cookie[] cookies) {
+		if (cookies == null) {
+			return null;
+		}
+
+		for (Cookie cookie : cookies) {
+			if (REFRESH_TOKEN_COOKIE_NAME.equals(cookie.getName())) {
+				return cookie.getValue();
+			}
+		}
+
+		return null;
+	}
 }

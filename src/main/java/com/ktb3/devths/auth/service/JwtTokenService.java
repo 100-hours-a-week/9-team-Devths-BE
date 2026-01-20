@@ -8,6 +8,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.ktb3.devths.auth.dto.internal.TokenPair;
 import com.ktb3.devths.global.config.properties.JwtProperties;
+import com.ktb3.devths.global.exception.CustomException;
+import com.ktb3.devths.global.response.ErrorCode;
 import com.ktb3.devths.global.security.jwt.JwtTokenProvider;
 import com.ktb3.devths.user.domain.entity.User;
 import com.ktb3.devths.user.domain.entity.UserToken;
@@ -71,5 +73,57 @@ public class JwtTokenService {
 		userTokenRepository.deleteByUserId(user.getId());
 
 		log.info("Refresh Token 무효화 완료: userId={}", userId);
+	}
+
+	/**
+	 * Refresh Token으로 새 토큰 쌍 발급 (RTR 적용)
+	 *
+	 * @param refreshToken Refresh Token
+	 * @return TokenPair (accessToken, refreshToken, refreshTokenExpiresAt)
+	 * @throws CustomException REFRESH_TOKEN_REUSED, EXPIRED_REFRESH_TOKEN, WITHDRAWN_USER
+	 */
+	@Transactional
+	public TokenPair refreshTokens(String refreshToken) {
+		// 1. RT로 DB 조회 (RTR 검증)
+		UserToken userToken = userTokenRepository.findByRefreshToken(refreshToken)
+			.orElseThrow(() -> {
+				log.warn("재사용된 Refresh Token 감지: token={}...", maskToken(refreshToken));
+				return new CustomException(ErrorCode.REFRESH_TOKEN_REUSED);
+			});
+
+		// 2. 만료 확인
+		if (userToken.getExpiresAt().isBefore(LocalDateTime.now())) {
+			log.warn("만료된 Refresh Token: userId={}", userToken.getUser().getId());
+			userTokenRepository.delete(userToken);
+			throw new CustomException(ErrorCode.EXPIRED_REFRESH_TOKEN);
+		}
+
+		// 3. User 조회 및 탈퇴 확인
+		User user = userToken.getUser();
+		if (user.isWithdraw()) {
+			log.warn("탈퇴한 회원의 토큰 재발급 시도: userId={}", user.getId());
+			userTokenRepository.delete(userToken);
+			throw new CustomException(ErrorCode.WITHDRAWN_USER);
+		}
+
+		// 4. 기존 RT 삭제 (RTR 적용)
+		userTokenRepository.delete(userToken);
+
+		// 5. 새 토큰 쌍 발급
+		TokenPair newTokenPair = issueTokenPair(user);
+
+		log.info("토큰 재발급 완료: userId={}", user.getId());
+
+		return newTokenPair;
+	}
+
+	/**
+	 * 토큰 마스킹 (로깅용)
+	 */
+	private String maskToken(String token) {
+		if (token == null || token.length() < 10) {
+			return "***";
+		}
+		return token.substring(0, 10) + "***";
 	}
 }
