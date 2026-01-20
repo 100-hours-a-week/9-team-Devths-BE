@@ -50,7 +50,7 @@ jobs:
       actions: read
       contents: read
     strategy:
-      fail-fast: false
+      fail-fast: true  # 정적 분석 실패 시 즉시 중단
       matrix:
         language: [ java-kotlin ]
     # container 부분은 제거 (GitHub 기본 환경 사용 권장)
@@ -69,7 +69,7 @@ jobs:
         uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
-          queries: security-and-quality
+          config-file: ./.github/codeql/codeql-config.yml
 
       - name: Build (Gradle)
         run: |
@@ -78,6 +78,66 @@ jobs:
 
       - name: CodeQL 분석 수행
         uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
+          upload: true
+
+      - name: 보안 취약점 개수 확인 및 빌드 차단
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "🔍 현재 커밋의 보안 취약점을 확인 중..."
+          echo "📍 Commit SHA: ${{ github.event.pull_request.head.sha }}"
+
+          # CodeQL 결과가 API에 반영될 때까지 대기
+          echo "⏳ CodeQL 결과 처리 대기 중 ..."
+          sleep 30
+
+          # 현재 PR의 head SHA로 필터링하여 Code Scanning 결과 조회
+          CURRENT_SHA="${{ github.event.pull_request.head.sha }}"
+
+          # 현재 커밋에서 발견된 보안 취약점만 필터링 (vulnerable 패키지 제외)
+          # vulnerable 패키지는 의도적인 테스트 코드이므로 빌드 차단에서 제외
+          ALERTS=$(gh api "repos/${{ github.repository }}/code-scanning/alerts?tool_name=CodeQL&state=open&ref=refs/heads/${{ github.event.pull_request.head.ref }}" \
+            --jq "[.[] | select(.most_recent_instance.ref == \"refs/heads/${{ github.event.pull_request.head.ref }}\") | select(.rule.security_severity_level != null) | select(.most_recent_instance.location.path | contains(\"/vulnerable/\") | not)] | length")
+
+          echo "⚠️ 현재 브랜치에서 발견된 보안 취약점: $ALERTS개 (vulnerable 패키지 제외)"
+
+          # 취약점 상세 정보 출력
+          if [ "$ALERTS" -gt 0 ]; then
+            echo ""
+            echo "📋 발견된 취약점 목록:"
+            gh api "repos/${{ github.repository }}/code-scanning/alerts?tool_name=CodeQL&state=open&ref=refs/heads/${{ github.event.pull_request.head.ref }}" \
+              --jq '.[] | select(.most_recent_instance.ref == "refs/heads/${{ github.event.pull_request.head.ref }}") | select(.rule.security_severity_level != null) | select(.most_recent_instance.location.path | contains("/vulnerable/") | not) | "  - [\(.rule.severity)] \(.rule.description) (\(.most_recent_instance.location.path):\(.most_recent_instance.location.start_line))"' || true
+          fi
+
+          # vulnerable 패키지의 취약점 개수도 표시 (정보용)
+          VULNERABLE_ALERTS=$(gh api "repos/${{ github.repository }}/code-scanning/alerts?tool_name=CodeQL&state=open&ref=refs/heads/${{ github.event.pull_request.head.ref }}" \
+            --jq "[.[] | select(.most_recent_instance.ref == \"refs/heads/${{ github.event.pull_request.head.ref }}\") | select(.rule.security_severity_level != null) | select(.most_recent_instance.location.path | contains(\"/vulnerable/\"))] | length")
+
+          if [ "$VULNERABLE_ALERTS" -gt 0 ]; then
+            echo ""
+            echo "ℹ️ vulnerable 패키지에서 감지된 취약점: $VULNERABLE_ALERTS개 (의도적인 테스트 코드, 빌드 차단 제외)"
+          fi
+
+          # 취약점이 있으면 빌드 차단
+          if [ "$ALERTS" -gt 0 ]; then
+            echo ""
+            echo "════════════════════════════════════════════════"
+            echo "❌ CRITICAL: 보안 취약점이 발견되었습니다!"
+            echo "════════════════════════════════════════════════"
+            echo "📊 발견된 취약점 수: $ALERTS개"
+            echo "🔗 상세 내역: https://github.com/${{ github.repository }}/security/code-scanning"
+            echo ""
+            echo "⚠️ 다음 중 하나를 수행해야 합니다:"
+            echo "  1. 코드를 수정하여 취약점 해결"
+            echo "  2. GitHub Security 탭에서 False Positive인 경우 'Dismiss' 처리"
+            echo "════════════════════════════════════════════════"
+            exit 1
+          else
+            echo ""
+            echo "✅ 보안 검사 통과! 취약점이 발견되지 않았습니다."
+          fi
 
   # 추후 통합 테스트 과정 추가 예정
 
@@ -85,7 +145,8 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-22.04
-    needs: [ lint, static_analysis ] # 테스트 통과 후 빌드
+    needs: [ lint, static_analysis ]
+    if: success()
     steps:
       - name: 체크아웃
         uses: actions/checkout@v4
@@ -156,10 +217,12 @@ jobs:
             **경로**: `${{ github.event.pull_request.head.ref }}` → `${{ github.event.pull_request.base.ref }}`
             
             **📊 상세 결과**:
-            - Lint: ${{ needs.lint.result == 'success' && ' ✅' || ' ❌' }}
-            - Static Analysis: ${{ needs.static_analysis.result == 'success' && ' ✅' || ' ❌' }}
-            - Build: ${{ needs.build.result == 'success' && ' ✅' || ' ❌' }}
-            
+            - Lint: ${{ needs.lint.result == 'success' && '✅' || '❌ FAILED' }}
+            - Static Analysis (CodeQL): ${{ needs.static_analysis.result == 'success' && '✅' || '❌ FAILED' }}
+            - Build: ${{ needs.build.result == 'success' && '✅' || (needs.build.result == 'skipped' && '⏭️ SKIPPED' || '❌ FAILED') }}
+
+            ${{ needs.static_analysis.result != 'success' && '⚠️ **정적 분석 실패로 인해 빌드가 중단되었습니다.**' || '' }}
+
             **🔗 링크**: [PR 확인하기](${{ github.event.pull_request.html_url }})
           color: "${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && 65280 || 16711680 }}"
           username: GitHub PR Bot
