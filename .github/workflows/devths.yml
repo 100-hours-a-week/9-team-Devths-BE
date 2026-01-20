@@ -10,7 +10,7 @@ env:
   JAVA_VERSION: "21"
   AWS_REGION: ${{ secrets.AWS_REGION }}
   S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
-  S3_PREFIX: ci/${{ github.repository }}/${{ github.ref_name }}/${{ github.sha }}
+  S3_PREFIX: ${{ github.repository }}/${{ github.ref_name }}/${{ github.sha }}
 
 jobs:
   # Lint 설정
@@ -47,7 +47,6 @@ jobs:
   # CodeQL 기반 코드 정적 분석 실행
   static_analysis:
     name: static-analysis
-    needs: [ lint ]
     runs-on: ubuntu-latest
     permissions:
       security-events: write
@@ -57,7 +56,7 @@ jobs:
       fail-fast: false
       matrix:
         language: [ java-kotlin ]
-    # container 부분은 제거 (GitHub 기본 환경 사용 권장)
+
     steps:
       - name: 체크아웃
         uses: actions/checkout@v4
@@ -88,7 +87,7 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-22.04
-    needs: [ static_analysis ] # 테스트 통과 후 빌드
+    needs: [ lint, static_analysis ] # 테스트 통과 후 빌드
     steps:
       - name: 체크아웃
         uses: actions/checkout@v4
@@ -153,22 +152,11 @@ jobs:
         env:
           USER_MAP: ${{ secrets.USER_MAP_JSON }}
         run: |
-          # 1. 작성자 매핑 및 @멘션만 추출
-          LOGIN_ID="${{ github.event.pull_request.user.login }}"
-          FULL_MAPPED=$(echo "$USER_MAP" | jq -r --arg id "$LOGIN_ID" '.[$id] // $id')
-          
-          if [[ $FULL_MAPPED =~ (<@[0-9]+>) ]]; then
-            AUTHOR_TAG="${BASH_REMATCH[1]}"
-          else
-            AUTHOR_TAG="$FULL_MAPPED"
-          fi
-          echo "author=$AUTHOR_TAG" >> $GITHUB_OUTPUT
-
-          # 2. 커밋 메시지 추출 (Push 제목 대용)
+          # 1. 커밋 메시지 추출 (Push 제목 대용)
           COMMIT_MSG=$(echo "${{ github.event.head_commit.message }}" | head -n 1)
           echo "title=$COMMIT_MSG" >> $GITHUB_OUTPUT
 
-          # 3. 브랜치 정보
+          # 2. 브랜치 정보
           echo "branch=${{ github.ref_name }}" >> $GITHUB_OUTPUT
 
       - name: Discord 빌드 알림
@@ -180,14 +168,13 @@ jobs:
           title: "${{ steps.prep.outputs.branch }} 결과 [${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && '✅성공' || '❌실패' }}]"
           description: |
             **커밋 메시지**: ${{ steps.prep.outputs.title }}
-            **작성자**: ${{ steps.prep.outputs.author }}
             **브랜치**: `${{ steps.prep.outputs.branch }}`
             **환경**: ${{ github.ref_name == 'main' && '🚀 운영(PROD)' || (github.ref_name == 'release' && '🧪 스테이징(STAGING)' || '🛠️ 개발(DEV)') }}
             
             **📊 상세 결과**:
-            - Lint: ${{ needs.lint.result == 'success' && '✅ success' || '❌ failure' }}
-            - Static Analysis: ${{ needs.static_analysis.result == 'success' && '✅ success' || '❌ failure' }}
-            - Build: ${{ needs.build.result == 'success' && '✅ success' || '❌ failure' }}
+            - Lint: ${{ needs.lint.result == 'success' && ' ✅' || ' ❌' }}
+            - Static Analysis: ${{ needs.static_analysis.result == 'success' && '✅' || ' ❌' }}
+            - Build: ${{ needs.build.result == 'success' && ' ✅' || ' ❌' }}
             
             **🔗 링크**: [커밋 확인하기](${{ github.event.repository.html_url }}/commit/${{ github.sha }})
 

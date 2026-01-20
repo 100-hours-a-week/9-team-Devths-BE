@@ -3,7 +3,7 @@ name: Devths-BE CI 파이프라인
 # dev/release/main 모두 진행
 on:
   pull_request:
-    branches: [develop, release, main]
+    branches: [ develop, release, main ]
 
 # ENV 설정
 env:
@@ -44,7 +44,6 @@ jobs:
   # CodeQL 기반 코드 정적 분석 실행
   static_analysis:
     name: static-analysis
-    needs: [ lint ]
     runs-on: ubuntu-latest
     permissions:
       security-events: write
@@ -85,7 +84,7 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-22.04
-    needs: [static_analysis] # 테스트 통과 후 빌드
+    needs: [ lint, static_analysis ] # 테스트 통과 후 빌드
     steps:
       - name: 체크아웃
         uses: actions/checkout@v4
@@ -104,7 +103,7 @@ jobs:
   notify-discord:
     name: notify
     runs-on: ubuntu-22.04
-    needs: [lint, static_analysis, build]
+    needs: [ lint, static_analysis, build ]
     if: always()
     steps:
       - name: 데이터 준비
