@@ -54,12 +54,25 @@ public class SocialAccount {
 	@CreatedDate
 	private LocalDateTime createdAt;
 
-	@Column(name = "access_token", nullable = false)
+	@Column(name = "access_token", nullable = false, columnDefinition = "VARCHAR(1024)")
 	private String accessToken;
 
-	@Column(name = "refresh_token", nullable = false)
+	@Column(name = "refresh_token", nullable = false, columnDefinition = "VARCHAR(1024)")
 	private String refreshToken;
 
 	@Column(name = "expires_at", nullable = false)
 	private LocalDateTime expiresAt;
+
+	/**
+	 * Google Access Token / Refresh Token 갱신
+	 *
+	 * @param encryptedAccessToken 암호화된 Google Access Token
+	 * @param encryptedRefreshToken 암호화된 Google Refresh Token
+	 * @param expiresAt Google Access Token 만료 시간
+	 */
+	public void updateTokens(String encryptedAccessToken, String encryptedRefreshToken, LocalDateTime expiresAt) {
+		this.accessToken = encryptedAccessToken;
+		this.refreshToken = encryptedRefreshToken;
+		this.expiresAt = expiresAt;
+	}
 }

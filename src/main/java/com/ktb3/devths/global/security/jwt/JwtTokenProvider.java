@@ -29,6 +29,9 @@ public class JwtTokenProvider {
 	private static final String ROLE_CLAIM = "role";
 	private static final String GOOGLE_SUB_CLAIM = "googleSub";
 	private static final String PROVIDER_CLAIM = "provider";
+	private static final String GOOGLE_ACCESS_TOKEN_CLAIM = "googleAccessToken";
+	private static final String GOOGLE_REFRESH_TOKEN_CLAIM = "googleRefreshToken";
+	private static final String GOOGLE_ACCESS_TOKEN_EXPIRES_IN_CLAIM = "googleAccessTokenExpiresIn";
 
 	private final JwtProperties jwtProperties;
 
@@ -76,6 +79,30 @@ public class JwtTokenProvider {
 			.expiration(expiryDate)
 			.signWith(key)
 			.compact();
+	}
+
+	public String generateTempToken(String email, String googleSub, String provider, String googleAccessToken,
+		String googleRefreshToken, int googleAccessTokenExpiresIn) {
+		Date now = new Date();
+		Date expiryDate = new Date(now.getTime() + jwtProperties.getTempTokenExpiration());
+
+		SecretKey key = getSigningKey();
+
+		var builder = Jwts.builder()
+			.claim(EMAIL_CLAIM, email)
+			.claim(GOOGLE_SUB_CLAIM, googleSub)
+			.claim(PROVIDER_CLAIM, provider)
+			.claim(GOOGLE_ACCESS_TOKEN_CLAIM, googleAccessToken)
+			.claim(GOOGLE_ACCESS_TOKEN_EXPIRES_IN_CLAIM, googleAccessTokenExpiresIn)
+			.issuedAt(now)
+			.expiration(expiryDate)
+			.signWith(key);
+
+		if (googleRefreshToken != null) {
+			builder.claim(GOOGLE_REFRESH_TOKEN_CLAIM, googleRefreshToken);
+		}
+
+		return builder.compact();
 	}
 
 	public Claims parseToken(String token) {
@@ -151,6 +178,35 @@ public class JwtTokenProvider {
 		}
 
 		return provider;
+	}
+
+	public String getGoogleAccessTokenFromTempToken(String token) {
+		Claims claims = parseToken(token);
+		String accessToken = claims.get(GOOGLE_ACCESS_TOKEN_CLAIM, String.class);
+
+		if (accessToken == null) {
+			throw new CustomException(ErrorCode.INVALID_TEMP_TOKEN);
+		}
+
+		return accessToken;
+	}
+
+	public String getGoogleRefreshTokenFromTempToken(String token) {
+		Claims claims = parseToken(token);
+		String refreshToken = claims.get(GOOGLE_REFRESH_TOKEN_CLAIM, String.class);
+
+		return refreshToken;
+	}
+
+	public int getGoogleAccessTokenExpiresInFromTempToken(String token) {
+		Claims claims = parseToken(token);
+		Integer expiresIn = claims.get(GOOGLE_ACCESS_TOKEN_EXPIRES_IN_CLAIM, Integer.class);
+
+		if (expiresIn == null) {
+			throw new CustomException(ErrorCode.INVALID_TEMP_TOKEN);
+		}
+
+		return expiresIn;
 	}
 
 	private SecretKey getSigningKey() {
