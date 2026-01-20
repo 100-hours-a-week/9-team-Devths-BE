@@ -10,7 +10,7 @@ env:
   JAVA_VERSION: "21"
   AWS_REGION: ${{ secrets.AWS_REGION }}
   S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
-  S3_PREFIX: ${{ github.repository }}/${{ github.ref_name }}/${{ github.sha }}
+  S3_PREFIX: ${{ github.repository }}/${{ github.ref_name }}
 
 jobs:
   # Lint 설정
@@ -69,9 +69,10 @@ jobs:
           cache: 'gradle'
 
       - name: CodeQL 초기화
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
+          queries: security-and-quality
 
       - name: Build (Gradle)
         run: |
@@ -79,7 +80,7 @@ jobs:
           ./gradlew build -x test -x check
 
       - name: CodeQL 분석 수행
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
 
   # 추후 통합 테스트 과정 추가 예정
 
@@ -109,10 +110,14 @@ jobs:
           aws-secret-access-key: ${{secrets.AWS_SECRET_KEY}}
           aws-region: ${{secrets.AWS_REGION}}
 
+      - name: 타임스탬프 생성
+        id: timestamp
+        run: echo "value=$(date +'%Y%m%d_%H%M%S')-${{ github.sha }}" >> $GITHUB_OUTPUT
+
       - name: JAR을 S3 업로드
         run: |
           set -euo pipefail
-          DEST="s3://${S3_BUCKET}/${S3_PREFIX}"
+          DEST="s3://${S3_BUCKET}/${S3_PREFIX}/${{ steps.timestamp.outputs.value }}"
 
           # build/libs/*.jar 목록 가져오기
           shopt -s nullglob
