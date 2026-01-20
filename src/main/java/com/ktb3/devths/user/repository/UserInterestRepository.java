@@ -7,7 +7,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.ktb3.devths.user.domain.Interests;
-import com.ktb3.devths.user.domain.entity.User;
 import com.ktb3.devths.user.domain.entity.UserInterest;
 
 public interface UserInterestRepository extends JpaRepository<UserInterest, Long> {
