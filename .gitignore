@@ -12,6 +12,7 @@ application-local.yml
 .env.local
 CLAUDE.md
 .claude/
+AGENTS.md
 
 ### STS ###
 .apt_generated
