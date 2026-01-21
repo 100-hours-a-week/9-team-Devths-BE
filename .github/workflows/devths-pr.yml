@@ -86,11 +86,33 @@ jobs:
           upload: true
 
       - name: 보안 취약점 결과 확인 및 차단
-        uses: advanced-security/check-alerts@v
-        with:
-          # high, critical 등급이 있으면 이 step이 실패(Fail) 처리됨
-          fail-on: high
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "⏳ 분석 결과가 GitHub에 반영되기를 기다리는 중 (10초)..."
+          sleep 10
+          
+          # 1. 현재 이벤트가 push인지 pr인지에 따라 검색할 REF 설정
+          # GITHUB_REF는 push일 땐 refs/heads/branch명, PR일 땐 refs/pull/번호/merge가 됩니다.
+          CURRENT_REF="${{ github.ref }}"
+          echo "📍 현재 Ref: $CURRENT_REF"
+          
+          # 2. API 호출하여 High/Critical 등급의 Open 상태인 알림 조회
+          ALERTS=$(gh api "repos/${{ github.repository }}/code-scanning/alerts?tool_name=CodeQL&state=open&ref=$CURRENT_REF" \
+            --jq '[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical")]')
+          
+          COUNT=$(echo "$ALERTS" | jq 'length')
+          
+          if [ "$COUNT" -gt 0 ]; then
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "❌ 보안 검사 실패: 고위험(High/Critical) 취약점 $COUNT개 발견"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "$ALERTS" | jq -r '.[] | "- [\(.rule.security_severity_level)] \(.rule.description) \n   위치: \(.most_recent_instance.location.path)"'
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            exit 1
+          else
+            echo "✅ 보안 검사 통과: 현재 커밋($CURRENT_REF)은 안전합니다."
+          fi
 
   # 추후 통합 테스트 과정 추가 예정
 
@@ -150,8 +172,8 @@ jobs:
             **경로**: `${{ github.event.pull_request.head.ref }}` → `${{ github.event.pull_request.base.ref }}`
             
             **📊 상세 결과**:
-            - Lint: ${{ needs.lint.result == 'success' && '✅' || '❌ FAILED' }}
-            - Static Analysis (CodeQL): ${{ needs.static_analysis.result == 'success' && '✅' || ' ❌' }}
+            - Lint: ${{ needs.lint.result == 'success' && '✅' || '❌' }}
+            - Static Analysis: ${{ needs.static_analysis.result == 'success' && '✅' || '❌' }}
 
             ${{ needs.static_analysis.result != 'success' && '⚠️ **정적 분석 실패로 인해 파이프라인이 중단되었습니다.**' || '' }}
 
