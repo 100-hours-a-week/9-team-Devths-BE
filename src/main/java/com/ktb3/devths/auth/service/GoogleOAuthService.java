@@ -1,8 +1,5 @@
 package com.ktb3.devths.auth.service;
 
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
-
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -39,8 +36,7 @@ public class GoogleOAuthService {
 	public GoogleTokenResponse exchangeAuthCodeForToken(String authCode) {
 		try {
 			MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
-			String normalizedCode = URLDecoder.decode(authCode, StandardCharsets.UTF_8);
-			params.add("code", normalizedCode);
+			params.add("code", authCode);
 			params.add("client_id", googleOAuthProperties.getClientId());
 			params.add("client_secret", googleOAuthProperties.getClientSecret());
 			params.add("redirect_uri", googleOAuthProperties.getRedirectUri());

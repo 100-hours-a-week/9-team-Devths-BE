@@ -43,8 +43,6 @@ public class UserController {
 		response.addCookie(CookieUtil.createRefreshTokenCookie(result.tokenPair().refreshToken()));
 
 		return ResponseEntity.status(HttpStatus.CREATED)
-			.header("Access-Control-Expose-Headers", "Authorization")
-			.header("Access-Control-Allow-Credentials", "true")
 			.body(ApiResponse.success("회원가입에 성공하였습니다.", result.response()));
 	}
 
