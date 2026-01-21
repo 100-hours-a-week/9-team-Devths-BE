@@ -60,8 +60,6 @@ public class AuthController {
 			: GoogleLoginResponse.newUser(result.email(), result.tempToken());
 
 		return ResponseEntity.ok()
-			.header("Access-Control-Expose-Headers", "Authorization")
-			.header("Access-Control-Allow-Credentials", "true")
 			.body(ApiResponse.success(message, loginResponse));
 	}
 
@@ -105,8 +103,6 @@ public class AuthController {
 		response.addCookie(CookieUtil.createRefreshTokenCookie(newTokenPair.refreshToken()));
 
 		return ResponseEntity.ok()
-			.header("Access-Control-Expose-Headers", "Authorization")
-			.header("Access-Control-Allow-Credentials", "true")
 			.body(ApiResponse.success("토큰 재발급에 성공하였습니다.", null));
 	}
 }
