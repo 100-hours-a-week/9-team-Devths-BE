@@ -1,5 +1,6 @@
 package com.ktb3.devths.user.domain.entity;
 
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 
 import org.springframework.data.annotation.CreatedDate;
@@ -58,4 +59,26 @@ public class User {
 
 	@Column(name = "withdraw_at", nullable = true)
 	private LocalDateTime withdrawAt;
+
+	public void updateNickname(String nickname) {
+		this.nickname = nickname;
+	}
+
+	public void withdraw() {
+		this.isWithdraw = true;
+		this.withdrawAt = LocalDateTime.now();
+		String randomSuffix = generateRandomString(6);
+		this.email = this.email + "_deleted_" + randomSuffix;
+		this.nickname = this.nickname + "_deleted_" + randomSuffix;
+	}
+
+	private String generateRandomString(int length) {
+		String characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+		SecureRandom random = new SecureRandom();
+		StringBuilder sb = new StringBuilder(length);
+		for (int i = 0; i < length; i++) {
+			sb.append(characters.charAt(random.nextInt(characters.length())));
+		}
+		return sb.toString();
+	}
 }

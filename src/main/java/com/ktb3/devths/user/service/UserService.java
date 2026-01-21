@@ -23,10 +23,14 @@ import com.ktb3.devths.user.domain.entity.User;
 import com.ktb3.devths.user.domain.entity.UserInterest;
 import com.ktb3.devths.user.dto.internal.UserSignupResult;
 import com.ktb3.devths.user.dto.request.UserSignupRequest;
+import com.ktb3.devths.user.dto.request.UserUpdateRequest;
+import com.ktb3.devths.user.dto.response.UserMeResponse;
 import com.ktb3.devths.user.dto.response.UserSignupResponse;
+import com.ktb3.devths.user.dto.response.UserUpdateResponse;
 import com.ktb3.devths.user.repository.SocialAccountRepository;
 import com.ktb3.devths.user.repository.UserInterestRepository;
 import com.ktb3.devths.user.repository.UserRepository;
+import com.ktb3.devths.user.repository.UserTokenRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,6 +44,7 @@ public class UserService {
 	private final UserRepository userRepository;
 	private final SocialAccountRepository socialAccountRepository;
 	private final UserInterestRepository userInterestRepository;
+	private final UserTokenRepository userTokenRepository;
 	private final JwtTokenValidator jwtTokenValidator;
 	private final JwtTokenProvider jwtTokenProvider;
 	private final JwtTokenService jwtTokenService;
@@ -117,7 +122,7 @@ public class UserService {
 		TokenPair tokenPair = jwtTokenService.issueTokenPair(user);
 
 		List<String> interestNames = interests.stream()
-			.map(userInterest -> userInterest.getInterest().name())
+			.map(userInterest -> userInterest.getInterest().getDisplayName())
 			.collect(Collectors.toList());
 
 		UserSignupResponse response = UserSignupResponse.of(user, interestNames);
@@ -127,10 +132,83 @@ public class UserService {
 		return new UserSignupResult(response, tokenPair);
 	}
 
+	@Transactional(readOnly = true)
+	public UserMeResponse getMyInfo(Long userId) {
+		User user = userRepository.findByIdAndIsWithdrawFalse(userId)
+			.orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+		List<Interests> interests = userInterestRepository.findInterestsByUserId(userId);
+
+		List<String> interestNames = interests.stream()
+			.map(Interests::getDisplayName)
+			.collect(Collectors.toList());
+
+		return UserMeResponse.of(user, interestNames);
+	}
+
+	@Transactional
+	public UserUpdateResponse updateMyInfo(Long userId, UserUpdateRequest request) {
+		User user = userRepository.findByIdAndIsWithdrawFalse(userId)
+			.orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+		// 닉네임 변경 시 중복 체크
+		if (!user.getNickname().equals(request.nickname())) {
+			if (userRepository.existsByNickname(request.nickname())) {
+				throw new CustomException(ErrorCode.DUPLICATE_NICKNAME);
+			}
+			user.updateNickname(request.nickname());
+		}
+
+		// interests가 전달된 경우 업데이트
+		if (request.interests() != null && !request.interests().isEmpty()) {
+			// 기존 UserInterest 삭제
+			userInterestRepository.deleteAllByUser_Id(userId);
+
+			// 새로운 UserInterest 생성 및 저장
+			List<UserInterest> newInterests = request.interests().stream()
+				.map(this::parseInterest)
+				.map(interest -> UserInterest.builder().user(user).interest(interest).build())
+				.collect(Collectors.toList());
+
+			try {
+				userInterestRepository.saveAll(newInterests);
+			} catch (DataIntegrityViolationException e) {
+				throw new CustomException(ErrorCode.INVALID_INPUT);
+			}
+		}
+
+		// 응답 생성
+		List<Interests> interests = userInterestRepository.findInterestsByUserId(userId);
+		List<String> interestNames = interests.stream()
+			.map(Interests::getDisplayName)
+			.collect(Collectors.toList());
+
+		return UserUpdateResponse.of(user, interestNames);
+	}
+
+	@Transactional
+	public void withdraw(Long userId) {
+		User user = userRepository.findByIdAndIsWithdrawFalse(userId)
+			.orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+		// 연관 데이터 삭제
+		socialAccountRepository.deleteAllByUser_Id(userId);  // 재가입 허용
+		userInterestRepository.deleteAllByUser_Id(userId);    // 관심사 삭제
+		userTokenRepository.deleteByUserId(userId);           // Refresh Token 삭제
+
+		user.withdraw();
+	}
+
 	private Interests parseInterest(String value) {
+		// 영문 대문자로 시도 (BACKEND, FRONTEND 등)
 		try {
 			return Interests.valueOf(value.toUpperCase(Locale.ROOT));
 		} catch (IllegalArgumentException ex) {
+			// 영문 실패 시 한글로 시도 (백엔드, 프론트엔드 등)
+			Interests interest = Interests.fromDisplayName(value);
+			if (interest != null) {
+				return interest;
+			}
 			throw new CustomException(ErrorCode.INVALID_INPUT);
 		}
 	}
