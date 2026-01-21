@@ -3,6 +3,7 @@ package com.ktb3.devths.user.controller;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -68,5 +69,14 @@ public class UserController {
 		return ResponseEntity.ok(
 			ApiResponse.success("내 정보가 성공적으로 수정되었습니다.", response)
 		);
+	}
+
+	@DeleteMapping
+	public ResponseEntity<Void> withdraw(
+		@AuthenticationPrincipal UserPrincipal userPrincipal
+	) {
+		userService.withdraw(userPrincipal.getUserId());
+
+		return ResponseEntity.noContent().build();
 	}
 }

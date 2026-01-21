@@ -30,6 +30,7 @@ import com.ktb3.devths.user.dto.response.UserUpdateResponse;
 import com.ktb3.devths.user.repository.SocialAccountRepository;
 import com.ktb3.devths.user.repository.UserInterestRepository;
 import com.ktb3.devths.user.repository.UserRepository;
+import com.ktb3.devths.user.repository.UserTokenRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -43,6 +44,7 @@ public class UserService {
 	private final UserRepository userRepository;
 	private final SocialAccountRepository socialAccountRepository;
 	private final UserInterestRepository userInterestRepository;
+	private final UserTokenRepository userTokenRepository;
 	private final JwtTokenValidator jwtTokenValidator;
 	private final JwtTokenProvider jwtTokenProvider;
 	private final JwtTokenService jwtTokenService;
@@ -182,6 +184,19 @@ public class UserService {
 			.collect(Collectors.toList());
 
 		return UserUpdateResponse.of(user, interestNames);
+	}
+
+	@Transactional
+	public void withdraw(Long userId) {
+		User user = userRepository.findByIdAndIsWithdrawFalse(userId)
+			.orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+		// 연관 데이터 삭제
+		socialAccountRepository.deleteAllByUser_Id(userId);  // 재가입 허용
+		userInterestRepository.deleteAllByUser_Id(userId);    // 관심사 삭제
+		userTokenRepository.deleteByUserId(userId);           // Refresh Token 삭제
+
+		user.withdraw();
 	}
 
 	private Interests parseInterest(String value) {
