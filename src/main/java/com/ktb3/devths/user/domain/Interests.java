@@ -3,7 +3,7 @@ package com.ktb3.devths.user.domain;
 public enum Interests {
 	BACKEND("백엔드"),
 	FRONTEND("프론트엔드"),
-	AI("AI"),
+	AI("인공지능"),
 	CLOUD("클라우드");
 
 	private final String displayName;
