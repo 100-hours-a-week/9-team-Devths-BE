@@ -47,6 +47,10 @@ public class S3StorageService {
 		);
 	}
 
+	public void deleteFile(String s3Key) {
+		amazonS3.deleteObject(awsProperties.getS3().getBucket(), s3Key);
+	}
+
 	private String createPresignedUrl(String s3Key, String mimeType) {
 		Date expiration = new Date(System.currentTimeMillis() + PRESIGNED_URL_EXPIRATION_MINUTES * 60 * 1000);
 

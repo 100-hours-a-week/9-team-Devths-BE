@@ -75,4 +75,9 @@ public class S3Attachment {
 
 	@Column(name = "deleted_at", nullable = true)
 	private LocalDateTime deletedAt;
+
+	public void softDelete() {
+		this.isDeleted = true;
+		this.deletedAt = LocalDateTime.now();
+	}
 }
