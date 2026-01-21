@@ -10,7 +10,7 @@ env:
   JAVA_VERSION: "21"
   AWS_REGION: ${{ secrets.AWS_REGION }}
   S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
-  S3_PREFIX: ${{ github.repository }}/${{ github.ref_name }}
+  S3_PREFIX: BE/${{ github.ref_name }}
 
 jobs:
   # Lint 설정
@@ -170,29 +170,43 @@ jobs:
           aws-secret-access-key: ${{secrets.AWS_SECRET_KEY}}
           aws-region: ${{secrets.AWS_REGION}}
 
-      - name: 타임스탬프 생성
+      - name: JAR 이름 생성
         id: timestamp
-        run: echo "value=$(date +'%Y%m%d_%H%M%S')-${{ github.sha }}" >> $GITHUB_OUTPUT
+        run: |
+          # SHA의 앞 7자리만 변수에 저장
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          # 날짜와 SHORT_SHA를 결합하여 OUTPUT에 저장
+          echo "value=$(date +'%Y%m%d_%H%M%S')-$SHORT_SHA" >> $GITHUB_OUTPUT
 
       - name: JAR을 S3 업로드
         run: |
           set -euo pipefail
-          DEST="s3://${S3_BUCKET}/${S3_PREFIX}/${{ steps.timestamp.outputs.value }}"
+          DEST="s3://${S3_BUCKET}/${S3_PREFIX}"
 
-          # build/libs/*.jar 목록 가져오기
-          shopt -s nullglob
-          files=(build/libs/*.jar)
+          # 1. JAR 파일 이름 변경 (plain 제외한 실행 파일만)
+          # build/libs 폴더에서 plain이 붙지 않은 .jar 하나를 찾아 이름을 변경합니다.
+          ORIGINAL_JAR=$(ls build/libs/*.jar | grep -v 'plain' | head -n 1)
+          NEW_JAR_NAME="${{ steps.timestamp.outputs.value }}.jar"
 
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "JAR파일이 없습니다."
+          if [ -f "$ORIGINAL_JAR" ]; then
+            echo "📝 Renaming $ORIGINAL_JAR to $NEW_JAR_NAME"
+            mv "$ORIGINAL_JAR" "build/libs/$NEW_JAR_NAME"
+          else
+            echo "❌ 변경할 JAR 파일이 존재하지 않습니다."
             exit 1
           fi
 
+          # 2. build/libs/*.jar 목록 다시 가져오기
+          shopt -s nullglob
+          files=(build/libs/*.jar)
+
+          # 3. 업로드 로직 실행
           UPLOAD_COUNT=0
           for f in "${files[@]}"; do
             # 파일명에 "-plain.jar"이 포함되어 있지 않은 경우에만 업로드
             if [[ ! "$f" == *"-plain.jar" ]]; then
               echo "🚀 Uploading: $(basename "$f")"
+              # S3로 업로드
               aws s3 cp "$f" "${DEST}/$(basename "$f")" --only-show-errors
               UPLOAD_COUNT=$((UPLOAD_COUNT + 1))
             else
