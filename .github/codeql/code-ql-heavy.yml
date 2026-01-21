@@ -1,0 +1,8 @@
+name: "CodeQL Heavy"
+queries:
+  - uses: security-and-quality  # 최고 강도 (품질 포함)
+paths:
+  - 'src/main/java/**'
+paths-ignore:
+  - '**/test/**'
+  - '**/build/**'
