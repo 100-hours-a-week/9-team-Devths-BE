@@ -58,4 +58,8 @@ public class User {
 
 	@Column(name = "withdraw_at", nullable = true)
 	private LocalDateTime withdrawAt;
+
+	public void updateNickname(String nickname) {
+		this.nickname = nickname;
+	}
 }

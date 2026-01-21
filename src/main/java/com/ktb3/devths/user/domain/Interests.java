@@ -15,4 +15,13 @@ public enum Interests {
 	public String getDisplayName() {
 		return displayName;
 	}
+
+	public static Interests fromDisplayName(String displayName) {
+		for (Interests interest : values()) {
+			if (interest.displayName.equals(displayName)) {
+				return interest;
+			}
+		}
+		return null;
+	}
 }
