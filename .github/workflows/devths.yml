@@ -46,14 +46,13 @@ jobs:
 
   # CodeQL 기반 코드 정적 분석 실행
   static_analysis:
-    name: static-analysis
     runs-on: ubuntu-latest
     permissions:
       security-events: write
       actions: read
       contents: read
     strategy:
-      fail-fast: false
+      fail-fast: true  # 정적 분석 실패 시 즉시 중단
       matrix:
         language: [ java-kotlin ]
 
@@ -72,7 +71,10 @@ jobs:
         uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
-          queries: security-and-quality
+          config-file: >-
+            ${{ github.event_name == 'pull_request'
+            && './.github/codeql/code-ql-light.yml'
+            || './.github/codeql/code-ql-heavy.yml' }}
 
       - name: Build (Gradle)
         run: |
@@ -81,6 +83,67 @@ jobs:
 
       - name: CodeQL 분석 수행
         uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
+          upload: true
+
+      - name: 보안 취약점 개수 확인 및 빌드 차단 (Push)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 현재 Push된 브랜치 정보 가져오기
+          CURRENT_REF="${{ github.ref }}"
+          echo "🔍 분석 대상 브랜치: $CURRENT_REF"
+          
+          echo "⏳ CodeQL 결과 데이터 반영 확인 중..."
+          
+          # Polling 로직: 데이터가 처리될 때까지 대기
+          ALERTS_JSON="[]"
+          for i in {1..10}; do
+            # API 호출 (특정 브랜치의 모든 open 상태 취약점 조회)
+            ALERTS_JSON=$(gh api "repos/${{ github.repository }}/code-scanning/alerts?tool_name=CodeQL&state=open&ref=$CURRENT_REF")
+          
+            # 응답이 비어있지 않은지 확인
+            if [ -n "$ALERTS_JSON" ]; then
+              echo "✅ API 데이터 확인 완료!"
+              break
+            fi
+          
+            echo "⏳ 데이터 반영 대기 중... ($((i*5))s)"
+            sleep 5
+          done
+          
+          # 전체 경로에서 보안 취약점 개수 계산 (vulnerable 예외 없음)
+          ALERTS_COUNT=$(echo "$ALERTS_JSON" | jq -r "[.[] | select(.rule.security_severity_level != null)] | length")
+          
+          echo "⚠️ 발견된 총 보안 취약점: $ALERTS_COUNT개"
+          
+          if [ "$ALERTS_COUNT" -gt 0 ]; then
+            echo ""
+            echo "📋 취약점 상세 목록 (전체 코드):"
+            echo "$ALERTS_JSON" | jq -r '.[] | select(.rule.security_severity_level != null) | "  - [\(.rule.severity)] \(.rule.description) \n    위치: \(.most_recent_instance.location.path):\(.most_recent_instance.location.start_line)"'
+          
+            echo ""
+            echo "════════════════════════════════════════════════"
+            echo "❌ CRITICAL: 운영 브랜치에 취약점이 발견되었습니다!"
+            echo "════════════════════════════════════════════════"
+            echo "📊 총 취약점 수: $ALERTS_COUNT개"
+            echo "🔗 상세 확인: https://github.com/${{ github.repository }}/security/code-scanning"
+            echo "════════════════════════════════════════════════"
+          
+            # Job 실패 처리 -> Discord 알림에 ❌ 전송됨
+            exit 1
+          else
+            echo ""
+            echo "✅ 보안 검사 통과! 모든 코드가 안전합니다."
+          fi
+
+      - name: 빌드 아티팩트 저장
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: build/libs/*.jar
+          retention-days: 1
 
   # 추후 통합 테스트 과정 추가 예정
 
@@ -89,19 +152,16 @@ jobs:
     name: build
     runs-on: ubuntu-22.04
     needs: [ lint, static_analysis ] # 테스트 통과 후 빌드
+    if: success()
     steps:
       - name: 체크아웃
         uses: actions/checkout@v4
 
-      - name: Java 및 Gradle 설치
-        uses: actions/setup-java@v4
+      - name: 빌드 아티팩트 다운로드
+        uses: actions/download-artifact@v4
         with:
-          distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
-          cache: gradle
-
-      - name: 자바 빌드
-        run: ./gradlew clean build -x test -x check
+          name: build-artifacts
+          path: build/libs
 
       - name: AWS 자격 증명 설정
         uses: aws-actions/configure-aws-credentials@v4
@@ -177,10 +237,12 @@ jobs:
             **환경**: ${{ github.ref_name == 'main' && '🚀 운영(PROD)' || (github.ref_name == 'release' && '🧪 스테이징(STAGING)' || '🛠️ 개발(DEV)') }}
             
             **📊 상세 결과**:
-            - Lint: ${{ needs.lint.result == 'success' && ' ✅' || ' ❌' }}
-            - Static Analysis: ${{ needs.static_analysis.result == 'success' && '✅' || ' ❌' }}
-            - Build: ${{ needs.build.result == 'success' && ' ✅' || ' ❌' }}
-            
+            - Lint: ${{ needs.lint.result == 'success' && '✅' || '❌' }}
+            - Static Analysis: ${{ needs.static_analysis.result == 'success' && '✅' || '❌' }}
+            - Build: ${{ needs.build.result == 'success' && '✅' || (needs.build.result == 'skipped' && '⏭️' || '❌') }}
+
+            ${{ needs.static_analysis.result != 'success' && '⚠️ **정적 분석 실패로 인해 빌드가 중단되었습니다.**' || '' }}
+
             **🔗 링크**: [커밋 확인하기](${{ github.event.repository.html_url }}/commit/${{ github.sha }})
 
           color: "${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && 65280 || 16711680 }}"
