@@ -23,6 +23,7 @@ import com.ktb3.devths.user.domain.entity.User;
 import com.ktb3.devths.user.domain.entity.UserInterest;
 import com.ktb3.devths.user.dto.internal.UserSignupResult;
 import com.ktb3.devths.user.dto.request.UserSignupRequest;
+import com.ktb3.devths.user.dto.response.UserMeResponse;
 import com.ktb3.devths.user.dto.response.UserSignupResponse;
 import com.ktb3.devths.user.repository.SocialAccountRepository;
 import com.ktb3.devths.user.repository.UserInterestRepository;
@@ -117,7 +118,7 @@ public class UserService {
 		TokenPair tokenPair = jwtTokenService.issueTokenPair(user);
 
 		List<String> interestNames = interests.stream()
-			.map(userInterest -> userInterest.getInterest().name())
+			.map(userInterest -> userInterest.getInterest().getDisplayName())
 			.collect(Collectors.toList());
 
 		UserSignupResponse response = UserSignupResponse.of(user, interestNames);
@@ -125,6 +126,20 @@ public class UserService {
 		log.info("회원가입 성공: userId={}", user.getId());
 
 		return new UserSignupResult(response, tokenPair);
+	}
+
+	@Transactional(readOnly = true)
+	public UserMeResponse getMyInfo(Long userId) {
+		User user = userRepository.findByIdAndIsWithdrawFalse(userId)
+			.orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+		List<Interests> interests = userInterestRepository.findInterestsByUserId(userId);
+
+		List<String> interestNames = interests.stream()
+			.map(Interests::getDisplayName)
+			.collect(Collectors.toList());
+
+		return UserMeResponse.of(user, interestNames);
 	}
 
 	private Interests parseInterest(String value) {

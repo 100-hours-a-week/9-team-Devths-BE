@@ -2,6 +2,8 @@ package com.ktb3.devths.user.controller;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -9,8 +11,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.ktb3.devths.auth.util.CookieUtil;
 import com.ktb3.devths.global.response.ApiResponse;
+import com.ktb3.devths.global.security.UserPrincipal;
 import com.ktb3.devths.user.dto.internal.UserSignupResult;
 import com.ktb3.devths.user.dto.request.UserSignupRequest;
+import com.ktb3.devths.user.dto.response.UserMeResponse;
 import com.ktb3.devths.user.dto.response.UserSignupResponse;
 import com.ktb3.devths.user.service.UserService;
 
@@ -38,5 +42,16 @@ public class UserController {
 			.header("Access-Control-Expose-Headers", "Authorization")
 			.header("Access-Control-Allow-Credentials", "true")
 			.body(ApiResponse.success("회원가입에 성공하였습니다.", result.response()));
+	}
+
+	@GetMapping("/me")
+	public ResponseEntity<ApiResponse<UserMeResponse>> getMyInfo(
+		@AuthenticationPrincipal UserPrincipal userPrincipal
+	) {
+		UserMeResponse response = userService.getMyInfo(userPrincipal.getUserId());
+
+		return ResponseEntity.ok(
+			ApiResponse.success("내 정보 조회에 성공하였습니다.", response)
+		);
 	}
 }
