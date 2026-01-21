@@ -10,6 +10,8 @@ import com.ktb3.devths.user.domain.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -41,20 +43,22 @@ public class S3Attachment {
 	@Column(name = "original_name", nullable = false)
 	private String originalName;
 
+	@Enumerated(EnumType.STRING)
 	@Column(name = "ref_type", nullable = false)
-	private String refType;
+	private RefType refType;
 
 	@Column(name = "ref_id", nullable = true)
 	private Long refId;
 
-	@Column(name = "s3_key", nullable = true)
+	@Column(name = "s3_key", nullable = false)
 	private String s3Key;
 
 	@Column(name = "mime_type", nullable = false)
 	private String mimeType;
 
+	@Enumerated(EnumType.STRING)
 	@Column(name = "category", nullable = true)
-	private String category;
+	private FileCategory category;
 
 	@Column(name = "file_size", nullable = false)
 	private Long fileSize;
