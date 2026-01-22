@@ -7,9 +7,12 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ktb3.devths.chatbot.domain.entity.AiChatMessage;
 import com.ktb3.devths.chatbot.domain.entity.AiChatRoom;
+import com.ktb3.devths.chatbot.dto.response.AiChatMessageListResponse;
 import com.ktb3.devths.chatbot.dto.response.AiChatRoomCreateResponse;
 import com.ktb3.devths.chatbot.dto.response.AiChatRoomListResponse;
+import com.ktb3.devths.chatbot.repository.AiChatMessageRepository;
 import com.ktb3.devths.chatbot.repository.AiChatRoomRepository;
 import com.ktb3.devths.global.exception.CustomException;
 import com.ktb3.devths.global.response.ErrorCode;
@@ -26,6 +29,7 @@ public class AiChatRoomService {
 	private static final String DEFAULT_TITLE = "새 채팅방";
 
 	private final AiChatRoomRepository aiChatRoomRepository;
+	private final AiChatMessageRepository aiChatMessageRepository;
 	private final UserRepository userRepository;
 
 	@Transactional
@@ -57,6 +61,25 @@ public class AiChatRoomService {
 		}
 
 		chatRoom.delete();
+	}
+
+	@Transactional(readOnly = true)
+	public AiChatMessageListResponse getChatMessages(Long userId, Long roomId, Integer size, Long lastId) {
+		AiChatRoom chatRoom = aiChatRoomRepository.findByIdAndIsDeletedFalse(roomId)
+			.orElseThrow(() -> new CustomException(ErrorCode.AI_CHATROOM_NOT_FOUND));
+
+		if (!chatRoom.getUser().getId().equals(userId)) {
+			throw new CustomException(ErrorCode.AI_CHATROOM_ACCESS_DENIED);
+		}
+
+		int pageSize = (size == null || size <= 0) ? DEFAULT_PAGE_SIZE : size;
+		Pageable pageable = PageRequest.of(0, pageSize + 1);
+
+		List<AiChatMessage> messages = (lastId == null)
+			? aiChatMessageRepository.findByRoomIdOrderByCreatedAtDesc(roomId, pageable)
+			: aiChatMessageRepository.findByRoomIdAndIdLessThanOrderByCreatedAtDesc(roomId, lastId, pageable);
+
+		return AiChatMessageListResponse.of(messages, pageSize);
 	}
 
 	@Transactional(readOnly = true)

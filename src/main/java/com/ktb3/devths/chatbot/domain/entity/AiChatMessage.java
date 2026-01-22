@@ -50,6 +50,7 @@ public class AiChatMessage {
 	private AiChatInterview interview;
 
 	@Column(name = "role", nullable = false)
+	@Enumerated(EnumType.STRING)
 	private MessageRole role;
 
 	@Column(name = "content", nullable = false)
