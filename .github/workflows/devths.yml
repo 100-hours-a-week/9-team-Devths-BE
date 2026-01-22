@@ -11,6 +11,8 @@ env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
   S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
   S3_PREFIX: BE/${{ github.ref_name }}
+  CODEDEPLOY_APPLICATION: ${{ secrets.CODEDEPLOY_APPLICATION }}
+  CODEDEPLOY_DEPLOYMENT_GROUP: ${{ secrets.CODEDEPLOY_DEPLOYMENT_GROUP }}
 
 jobs:
   # Lint 설정
@@ -128,6 +130,8 @@ jobs:
     runs-on: ubuntu-22.04
     needs: [ lint, static_analysis ] # 테스트 통과 후 빌드
     if: success()
+    outputs:
+      package_name: ${{ steps.package_name.outputs.package_name }}
     steps:
       - name: 체크아웃
         uses: actions/checkout@v4
@@ -145,7 +149,7 @@ jobs:
           aws-secret-access-key: ${{secrets.AWS_SECRET_KEY}}
           aws-region: ${{secrets.AWS_REGION}}
 
-      - name: JAR 이름 생성
+      - name: 배포 패키지 이름 생성
         id: timestamp
         run: |
           # SHA의 앞 7자리만 변수에 저장
@@ -153,52 +157,139 @@ jobs:
           # 날짜와 SHORT_SHA를 결합하여 OUTPUT에 저장
           echo "value=$(date +'%Y%m%d_%H%M%S')-$SHORT_SHA" >> $GITHUB_OUTPUT
 
-      - name: JAR을 S3 업로드
+      - name: 배포 패키지 준비 및 S3 업로드
         run: |
           set -euo pipefail
-          DEST="s3://${S3_BUCKET}/${S3_PREFIX}"
 
-          # 1. JAR 파일 이름 변경 (plain 제외한 실행 파일만)
-          # build/libs 폴더에서 plain이 붙지 않은 .jar 하나를 찾아 이름을 변경합니다.
+          PACKAGE_NAME="${{ steps.timestamp.outputs.value }}"
+          DEST="s3://${S3_BUCKET}/${S3_PREFIX}"
+          DEPLOY_DIR="deploy"
+
+          echo "📦 배포 패키지를 준비합니다..."
+
+          # 1. 배포 디렉토리 생성
+          mkdir -p $DEPLOY_DIR
+
+          # 2. JAR 파일 복사 (plain 제외한 실행 파일만)
           ORIGINAL_JAR=$(ls build/libs/*.jar | grep -v 'plain' | head -n 1)
-          NEW_JAR_NAME="${{ steps.timestamp.outputs.value }}.jar"
 
           if [ -f "$ORIGINAL_JAR" ]; then
-            echo "📝 Renaming $ORIGINAL_JAR to $NEW_JAR_NAME"
-            mv "$ORIGINAL_JAR" "build/libs/$NEW_JAR_NAME"
+            echo "📝 JAR 파일 복사: $ORIGINAL_JAR -> ${PACKAGE_NAME}.jar"
+            cp "$ORIGINAL_JAR" "$DEPLOY_DIR/${PACKAGE_NAME}.jar"
           else
-            echo "❌ 변경할 JAR 파일이 존재하지 않습니다."
+            echo "❌ JAR 파일을 찾을 수 없습니다."
             exit 1
           fi
 
-          # 2. build/libs/*.jar 목록 다시 가져오기
-          shopt -s nullglob
-          files=(build/libs/*.jar)
-
-          # 3. 업로드 로직 실행
-          UPLOAD_COUNT=0
-          for f in "${files[@]}"; do
-            # 파일명에 "-plain.jar"이 포함되어 있지 않은 경우에만 업로드
-            if [[ ! "$f" == *"-plain.jar" ]]; then
-              echo "🚀 Uploading: $(basename "$f")"
-              # S3로 업로드
-              aws s3 cp "$f" "${DEST}/$(basename "$f")" --only-show-errors
-              UPLOAD_COUNT=$((UPLOAD_COUNT + 1))
-            else
-              echo "⏭️ Skipping plain jar: $(basename "$f")"
-            fi
-          done
-
-          if [ $UPLOAD_COUNT -eq 0 ]; then
-            echo "실행가능한 JAR파일이 없습니다."
+          # 3. appspec.yml 복사
+          if [ -f "appspec.yml" ]; then
+            echo "📝 appspec.yml 복사"
+            cp appspec.yml $DEPLOY_DIR/
+          else
+            echo "❌ appspec.yml 파일을 찾을 수 없습니다."
             exit 1
           fi
+
+          # 4. 배포 스크립트 복사
+          if [ -d "scripts" ]; then
+            echo "📝 배포 스크립트 복사"
+            cp -r scripts $DEPLOY_DIR/
+          else
+            echo "❌ scripts 디렉토리를 찾을 수 없습니다."
+            exit 1
+          fi
+
+          # 5. 배포 환경 설정 파일 생성
+          echo "🔧 배포 환경 설정 파일 생성"
+          cat > $DEPLOY_DIR/deploy_env.sh <<EOF
+          # 배포 환경 설정
+          export BRANCH_NAME="${{ github.ref_name }}"
+          export SPRING_PROFILE="${{ github.ref_name == 'main' && 'prod' || (github.ref_name == 'release' && 'staging' || 'dev') }}"
+          export PARAMETER_STORE_PATH="${{ github.ref_name == 'main' && '/devths/prod/' || (github.ref_name == 'release' && '/devths/staging/' || '/devths/dev/') }}"
+          EOF
+
+          # 6. ZIP 패키지 생성
+          echo "🗜️  ZIP 패키지 생성: ${PACKAGE_NAME}.zip"
+          cd $DEPLOY_DIR
+          zip -r ../${PACKAGE_NAME}.zip .
+          cd ..
+
+          # 7. S3 업로드
+          echo "🚀 S3에 업로드: ${PACKAGE_NAME}.zip"
+          aws s3 cp ${PACKAGE_NAME}.zip ${DEST}/${PACKAGE_NAME}.zip --only-show-errors
+
+          echo "✅ 배포 패키지 업로드 완료"
+
+      - name: 배포 패키지 이름을 환경 변수로 저장
+        id: package_name
+        run: |
+          PACKAGE_NAME="${{ steps.timestamp.outputs.value }}.zip"
+          echo "package_name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
+
+  # CodeDeploy 기반 배포
+  deploy:
+    name: deploy
+    runs-on: ubuntu-22.04
+    needs: build
+    if: success()
+    outputs:
+      deployment_id: ${{ steps.create_deployment.outputs.deployment_id }}
+    steps:
+      - name: AWS 자격 증명 설정
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{secrets.AWS_ACCESS_KEY}}
+          aws-secret-access-key: ${{secrets.AWS_SECRET_KEY}}
+          aws-region: ${{secrets.AWS_REGION}}
+
+      - name: CodeDeploy 배포 생성
+        id: create_deployment
+        run: |
+          # build job에서 업로드한 배포 패키지 정보
+          PACKAGE_NAME="${{ needs.build.outputs.package_name }}"
+          S3_LOCATION="s3://${S3_BUCKET}/${S3_PREFIX}/${PACKAGE_NAME}"
+
+          echo "🚀 배포를 시작합니다..."
+          echo "  애플리케이션: ${CODEDEPLOY_APPLICATION}"
+          echo "  배포 그룹: ${CODEDEPLOY_DEPLOYMENT_GROUP}"
+          echo "  S3 위치: ${S3_LOCATION}"
+          echo "  배포 패키지: ${PACKAGE_NAME}"
+
+          # CodeDeploy 배포 생성
+          DEPLOYMENT_ID=$(aws deploy create-deployment \
+            --application-name "${CODEDEPLOY_APPLICATION}" \
+            --deployment-group-name "${CODEDEPLOY_DEPLOYMENT_GROUP}" \
+            --s3-location bucket="${S3_BUCKET}",key="${S3_PREFIX}/${PACKAGE_NAME}",bundleType=zip \
+            --description "GitHub Actions 배포 - Commit: ${{ github.sha }}" \
+            --query 'deploymentId' \
+            --output text)
+
+          echo "deployment_id=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+          echo "✅ 배포 ID: $DEPLOYMENT_ID"
+
+      - name: CodeDeploy 배포 상태 대기 및 확인
+        run: |
+          DEPLOYMENT_ID="${{ steps.create_deployment.outputs.deployment_id }}"
+          echo "⏳ 배포 완료를 기다리는 중... (배포 ID: $DEPLOYMENT_ID)"
+          echo "   - EC2에서 블루그린 배포 및 헬스체크가 진행됩니다"
+          echo "   - appspec.yml의 hooks에 정의된 스크립트가 순차적으로 실행됩니다"
+
+          # 배포 완료 대기 (최대 20분)
+          aws deploy wait deployment-successful \
+            --deployment-id "$DEPLOYMENT_ID" \
+            --cli-read-timeout 1200 \
+            --cli-connect-timeout 60
+
+          echo "✅ 배포가 성공적으로 완료되었습니다!"
+          echo "   - 블루그린 배포: 완료"
+          echo "   - 헬스체크 (Actuator): 통과"
+          echo "   - Nginx 포트 스위칭: 완료"
 
   # 디스코드 알람 제공
   notify-discord:
     name: notify
     runs-on: ubuntu-22.04
-    needs: [ lint, static_analysis, build ]
+    needs: [ lint, static_analysis, build, deploy ]
     if: always()
     steps:
       - name: 데이터 준비
@@ -213,27 +304,30 @@ jobs:
           # 2. 브랜치 정보
           echo "branch=${{ github.ref_name }}" >> $GITHUB_OUTPUT
 
-      - name: Discord 빌드 알림
+      - name: Discord 빌드 및 배포 알림
         uses: sarisia/actions-status-discord@v1
         with:
-          status: ${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && 'success' || 'failure' }}
+          status: ${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success' && needs.deploy.result == 'success') && 'success' || 'failure' }}
           # 타겟 브랜치에 따른 웹훅 분기
           webhook: ${{ github.ref_name == 'main' && secrets.DISCORD_WEBHOOK_PROD_URL || secrets.DISCORD_WEBHOOK_NON_PROD_URL }}
-          title: "${{ steps.prep.outputs.branch }} 결과 [${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && '✅성공' || '❌실패' }}]"
+          title: "${{ steps.prep.outputs.branch }} 결과 [${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success' && needs.deploy.result == 'success') && '✅성공' || '❌실패' }}]"
           description: |
             **커밋 메시지**: ${{ steps.prep.outputs.title }}
             **브랜치**: `${{ steps.prep.outputs.branch }}`
             **환경**: ${{ github.ref_name == 'main' && '🚀 운영(PROD)' || (github.ref_name == 'release' && '🧪 스테이징(STAGING)' || '🛠️ 개발(DEV)') }}
-            
+
             **📊 상세 결과**:
             - Lint: ${{ needs.lint.result == 'success' && '✅' || '❌' }}
             - Static Analysis: ${{ needs.static_analysis.result == 'success' && '✅' || '❌' }}
             - Build: ${{ needs.build.result == 'success' && '✅' || (needs.build.result == 'skipped' && '⏭️' || '❌') }}
+            - Deploy (CodeDeploy + Health Check): ${{ needs.deploy.result == 'success' && '✅' || (needs.deploy.result == 'skipped' && '⏭️' || '❌') }}
 
             ${{ needs.static_analysis.result != 'success' && '⚠️ **정적 분석 실패로 인해 빌드가 중단되었습니다.**' || '' }}
+            ${{ needs.deploy.result == 'success' && '🎉 **블루그린 배포 및 헬스체크가 완료되었습니다!**' || '' }}
+            ${{ needs.deploy.result == 'failure' && '❌ **배포 또는 헬스체크가 실패했습니다.**' || '' }}
 
             **🔗 링크**: [커밋 확인하기](${{ github.event.repository.html_url }}/commit/${{ github.sha }})
 
-          color: "${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && 65280 || 16711680 }}"
+          color: "${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success' && needs.deploy.result == 'success') && 65280 || 16711680 }}"
           username: GitHub Merge Bot
           avatar_url: https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
