@@ -1,5 +1,7 @@
 package com.ktb3.devths.global.storage.controller;
 
+import java.util.Set;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -10,7 +12,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ktb3.devths.global.exception.CustomException;
 import com.ktb3.devths.global.response.ApiResponse;
+import com.ktb3.devths.global.response.ErrorCode;
 import com.ktb3.devths.global.security.UserPrincipal;
 import com.ktb3.devths.global.storage.dto.request.FileAttachmentRequest;
 import com.ktb3.devths.global.storage.dto.request.PresignedUrlRequest;
@@ -26,8 +30,30 @@ import lombok.RequiredArgsConstructor;
 @RequestMapping("/api/files")
 @RequiredArgsConstructor
 public class FileController {
+	private static final Set<String> ALLOWED_IMAGE_MIME_TYPES = Set.of(
+		"image/jpeg",
+		"image/jpg",
+		"image/png",
+		"image/webp"
+	);
+
 	private final S3StorageService s3StorageService;
 	private final S3AttachmentService s3AttachmentService;
+
+	@PostMapping("/presigned/signup")
+	public ResponseEntity<ApiResponse<PresignedUrlResponse>> generatePresignedUrlForSignup(
+		@Valid @RequestBody PresignedUrlRequest request
+	) {
+		// MIME 타입 검증
+		if (!ALLOWED_IMAGE_MIME_TYPES.contains(request.mimeType())) {
+			throw new CustomException(ErrorCode.INVALID_INPUT);
+		}
+
+		PresignedUrlResponse response = s3StorageService.generatePresignedUrl(request);
+
+		return ResponseEntity.status(HttpStatus.OK)
+			.body(ApiResponse.success("Presigned URL이 생성되었습니다.", response));
+	}
 
 	@PostMapping("/presigned")
 	public ResponseEntity<ApiResponse<PresignedUrlResponse>> generatePresignedUrl(

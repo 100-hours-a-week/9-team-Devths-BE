@@ -125,13 +125,36 @@ public class UserService {
 			throw new CustomException(ErrorCode.INVALID_INPUT);
 		}
 
+		// 프로필 사진 처리
+		UserSignupResponse.ProfileImage profileImage = null;
+		if (request.profileImageS3Key() != null && !request.profileImageS3Key().isBlank()) {
+			S3Attachment attachment = S3Attachment.builder()
+				.user(user)
+				.originalName("profile.jpg")
+				.s3Key(request.profileImageS3Key())
+				.mimeType("image/jpeg")
+				.category(null)
+				.fileSize(0L)
+				.refType(RefType.USER)
+				.refId(user.getId())
+				.sortOrder(0)
+				.build();
+
+			S3Attachment savedAttachment = s3AttachmentRepository.save(attachment);
+
+			profileImage = new UserSignupResponse.ProfileImage(
+				savedAttachment.getId(),
+				s3StorageService.getPublicUrl(savedAttachment.getS3Key())
+			);
+		}
+
 		TokenPair tokenPair = jwtTokenService.issueTokenPair(user);
 
 		List<String> interestNames = interests.stream()
 			.map(userInterest -> userInterest.getInterest().getDisplayName())
 			.collect(Collectors.toList());
 
-		UserSignupResponse response = UserSignupResponse.of(user, interestNames);
+		UserSignupResponse response = UserSignupResponse.of(user, interestNames, profileImage);
 
 		log.info("회원가입 성공: userId={}", user.getId());
 
