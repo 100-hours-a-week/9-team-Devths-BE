@@ -40,6 +40,7 @@ public class FileController {
 			.body(ApiResponse.success("Presigned URL이 생성되었습니다.", response));
 	}
 
+	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201")
 	@PostMapping
 	public ResponseEntity<ApiResponse<FileAttachmentResponse>> saveAttachment(
 		@AuthenticationPrincipal UserPrincipal userPrincipal,
@@ -54,6 +55,7 @@ public class FileController {
 			.body(ApiResponse.success("파일 정보가 성공적으로 등록되었습니다.", response));
 	}
 
+	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204")
 	@DeleteMapping("/{fileId}")
 	public ResponseEntity<Void> deleteAttachment(
 		@AuthenticationPrincipal UserPrincipal userPrincipal,

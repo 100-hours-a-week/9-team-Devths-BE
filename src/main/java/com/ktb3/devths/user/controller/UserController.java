@@ -32,6 +32,7 @@ import lombok.RequiredArgsConstructor;
 public class UserController {
 	private final UserService userService;
 
+	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201")
 	@PostMapping
 	public ResponseEntity<ApiResponse<UserSignupResponse>> signup(
 		@Valid @RequestBody UserSignupRequest request,
@@ -69,6 +70,7 @@ public class UserController {
 		);
 	}
 
+	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204")
 	@DeleteMapping
 	public ResponseEntity<Void> withdraw(
 		@AuthenticationPrincipal UserPrincipal userPrincipal
