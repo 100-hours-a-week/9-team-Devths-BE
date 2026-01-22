@@ -10,7 +10,7 @@ env:
   JAVA_VERSION: "21"
   AWS_REGION: ${{ secrets.AWS_REGION }}
   S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
-  S3_PREFIX: ${{ github.repository }}/${{ github.ref_name }}/${{ github.sha }}
+  S3_PREFIX: BE/${{ github.ref_name }}
 
 jobs:
   # Lint 설정
@@ -46,14 +46,13 @@ jobs:
 
   # CodeQL 기반 코드 정적 분석 실행
   static_analysis:
-    name: static-analysis
     runs-on: ubuntu-latest
     permissions:
       security-events: write
       actions: read
       contents: read
     strategy:
-      fail-fast: false
+      fail-fast: true  # 정적 분석 실패 시 즉시 중단
       matrix:
         language: [ java-kotlin ]
 
@@ -69,9 +68,10 @@ jobs:
           cache: 'gradle'
 
       - name: CodeQL 초기화
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
+          config-file: "./.github/codeql/code-ql-heavy.yml"
 
       - name: Build (Gradle)
         run: |
@@ -79,7 +79,46 @@ jobs:
           ./gradlew build -x test -x check
 
       - name: CodeQL 분석 수행
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
+          upload: true
+
+      - name: 보안 취약점 결과 확인 및 차단
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "⏳ 분석 결과가 GitHub에 반영되기를 기다리는 중 (10초)..."
+          sleep 10
+          
+          # 1. 현재 이벤트가 push인지 pr인지에 따라 검색할 REF 설정
+          # GITHUB_REF는 push일 땐 refs/heads/branch명, PR일 땐 refs/pull/번호/merge가 됩니다.
+          CURRENT_REF="${{ github.ref }}"
+          echo "📍 현재 Ref: $CURRENT_REF"
+          
+          # 2. API 호출하여 High/Critical 등급의 Open 상태인 알림 조회
+          ALERTS=$(gh api "repos/${{ github.repository }}/code-scanning/alerts?tool_name=CodeQL&state=open&ref=$CURRENT_REF" \
+            --jq '[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical")]')
+          
+          COUNT=$(echo "$ALERTS" | jq 'length')
+          
+          if [ "$COUNT" -gt 0 ]; then
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "❌ 보안 검사 실패: 고위험(High/Critical) 취약점 $COUNT개 발견"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "$ALERTS" | jq -r '.[] | "- [\(.rule.security_severity_level)] \(.rule.description) \n   위치: \(.most_recent_instance.location.path)"'
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            exit 1
+          else
+            echo "✅ 보안 검사 통과: 현재 커밋($CURRENT_REF)은 안전합니다."
+          fi
+
+      - name: 빌드 아티팩트 저장
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: build/libs/*.jar
+          retention-days: 1
 
   # 추후 통합 테스트 과정 추가 예정
 
@@ -88,19 +127,16 @@ jobs:
     name: build
     runs-on: ubuntu-22.04
     needs: [ lint, static_analysis ] # 테스트 통과 후 빌드
+    if: success()
     steps:
       - name: 체크아웃
         uses: actions/checkout@v4
 
-      - name: Java 및 Gradle 설치
-        uses: actions/setup-java@v4
+      - name: 빌드 아티팩트 다운로드
+        uses: actions/download-artifact@v4
         with:
-          distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
-          cache: gradle
-
-      - name: 자바 빌드
-        run: ./gradlew clean build -x test -x check
+          name: build-artifacts
+          path: build/libs
 
       - name: AWS 자격 증명 설정
         uses: aws-actions/configure-aws-credentials@v4
@@ -109,25 +145,43 @@ jobs:
           aws-secret-access-key: ${{secrets.AWS_SECRET_KEY}}
           aws-region: ${{secrets.AWS_REGION}}
 
+      - name: JAR 이름 생성
+        id: timestamp
+        run: |
+          # SHA의 앞 7자리만 변수에 저장
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          # 날짜와 SHORT_SHA를 결합하여 OUTPUT에 저장
+          echo "value=$(date +'%Y%m%d_%H%M%S')-$SHORT_SHA" >> $GITHUB_OUTPUT
+
       - name: JAR을 S3 업로드
         run: |
           set -euo pipefail
           DEST="s3://${S3_BUCKET}/${S3_PREFIX}"
 
-          # build/libs/*.jar 목록 가져오기
-          shopt -s nullglob
-          files=(build/libs/*.jar)
+          # 1. JAR 파일 이름 변경 (plain 제외한 실행 파일만)
+          # build/libs 폴더에서 plain이 붙지 않은 .jar 하나를 찾아 이름을 변경합니다.
+          ORIGINAL_JAR=$(ls build/libs/*.jar | grep -v 'plain' | head -n 1)
+          NEW_JAR_NAME="${{ steps.timestamp.outputs.value }}.jar"
 
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "JAR파일이 없습니다."
+          if [ -f "$ORIGINAL_JAR" ]; then
+            echo "📝 Renaming $ORIGINAL_JAR to $NEW_JAR_NAME"
+            mv "$ORIGINAL_JAR" "build/libs/$NEW_JAR_NAME"
+          else
+            echo "❌ 변경할 JAR 파일이 존재하지 않습니다."
             exit 1
           fi
 
+          # 2. build/libs/*.jar 목록 다시 가져오기
+          shopt -s nullglob
+          files=(build/libs/*.jar)
+
+          # 3. 업로드 로직 실행
           UPLOAD_COUNT=0
           for f in "${files[@]}"; do
             # 파일명에 "-plain.jar"이 포함되어 있지 않은 경우에만 업로드
             if [[ ! "$f" == *"-plain.jar" ]]; then
               echo "🚀 Uploading: $(basename "$f")"
+              # S3로 업로드
               aws s3 cp "$f" "${DEST}/$(basename "$f")" --only-show-errors
               UPLOAD_COUNT=$((UPLOAD_COUNT + 1))
             else
@@ -172,10 +226,12 @@ jobs:
             **환경**: ${{ github.ref_name == 'main' && '🚀 운영(PROD)' || (github.ref_name == 'release' && '🧪 스테이징(STAGING)' || '🛠️ 개발(DEV)') }}
             
             **📊 상세 결과**:
-            - Lint: ${{ needs.lint.result == 'success' && ' ✅' || ' ❌' }}
-            - Static Analysis: ${{ needs.static_analysis.result == 'success' && '✅' || ' ❌' }}
-            - Build: ${{ needs.build.result == 'success' && ' ✅' || ' ❌' }}
-            
+            - Lint: ${{ needs.lint.result == 'success' && '✅' || '❌' }}
+            - Static Analysis: ${{ needs.static_analysis.result == 'success' && '✅' || '❌' }}
+            - Build: ${{ needs.build.result == 'success' && '✅' || (needs.build.result == 'skipped' && '⏭️' || '❌') }}
+
+            ${{ needs.static_analysis.result != 'success' && '⚠️ **정적 분석 실패로 인해 빌드가 중단되었습니다.**' || '' }}
+
             **🔗 링크**: [커밋 확인하기](${{ github.event.repository.html_url }}/commit/${{ github.sha }})
 
           color: "${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && 65280 || 16711680 }}"
