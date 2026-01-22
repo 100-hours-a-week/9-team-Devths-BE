@@ -28,10 +28,12 @@ public enum ErrorCode {
 	// 403 Forbidden
 	ACCESS_DENIED(HttpStatus.FORBIDDEN, "접근 권한이 없습니다"),
 	WITHDRAWN_USER(HttpStatus.FORBIDDEN, "탈퇴한 회원입니다"),
+	AI_CHATROOM_ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 AI 채팅방에 접근 권한이 없습니다"),
 
 	// 404 Not Found
 	RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 리소스를 찾을 수 없습니다"),
 	USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다"),
+	AI_CHATROOM_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 AI 채팅방을 찾을 수 없습니다"),
 
 	// 409 Conflict
 	DUPLICATE_EMAIL(HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다"),

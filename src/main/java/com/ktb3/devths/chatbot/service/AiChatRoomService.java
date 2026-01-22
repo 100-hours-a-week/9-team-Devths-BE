@@ -47,6 +47,18 @@ public class AiChatRoomService {
 		return AiChatRoomCreateResponse.from(savedChatRoom);
 	}
 
+	@Transactional
+	public void deleteChatRoom(Long userId, Long roomId) {
+		AiChatRoom chatRoom = aiChatRoomRepository.findByIdAndIsDeletedFalse(roomId)
+			.orElseThrow(() -> new CustomException(ErrorCode.AI_CHATROOM_NOT_FOUND));
+
+		if (!chatRoom.getUser().getId().equals(userId)) {
+			throw new CustomException(ErrorCode.AI_CHATROOM_ACCESS_DENIED);
+		}
+
+		chatRoom.delete();
+	}
+
 	@Transactional(readOnly = true)
 	public AiChatRoomListResponse getChatRoomList(Long userId, Integer size, Long lastId) {
 		int pageSize = (size == null || size <= 0) ? DEFAULT_PAGE_SIZE : size;

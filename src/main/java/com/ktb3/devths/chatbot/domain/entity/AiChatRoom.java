@@ -59,4 +59,9 @@ public class AiChatRoom {
 
 	@Column(name = "deleted_at", nullable = true)
 	private LocalDateTime deletedAt;
+
+	public void delete() {
+		this.isDeleted = true;
+		this.deletedAt = LocalDateTime.now();
+	}
 }
