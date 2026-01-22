@@ -10,10 +10,10 @@ public record UserMeResponse(
 	UserSignupResponse.UserStats stats,
 	List<String> interests
 ) {
-	public static UserMeResponse of(User user, List<String> interestNames) {
+	public static UserMeResponse of(User user, List<String> interestNames, UserSignupResponse.ProfileImage profileImage) {
 		return new UserMeResponse(
 			user.getNickname(),
-			null, // MVP에서 profileImage는 null
+			profileImage,
 			new UserSignupResponse.UserStats(0, 0), // follower/following은 0
 			interestNames
 		);

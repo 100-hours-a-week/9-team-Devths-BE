@@ -13,6 +13,7 @@ public record UserSignupRequest(
 	@NotEmpty(message = "interests는 최소 1개 이상이어야 합니다")
 	List<String> interests,
 	@NotBlank(message = "tempToken은 필수입니다")
-	String tempToken
+	String tempToken,
+	String profileImageS3Key
 ) {
 }

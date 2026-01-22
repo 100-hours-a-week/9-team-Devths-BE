@@ -51,6 +51,12 @@ public class S3StorageService {
 		amazonS3.deleteObject(awsProperties.getS3().getBucket(), s3Key);
 	}
 
+	public String getPublicUrl(String s3Key) {
+		String bucket = awsProperties.getS3().getBucket();
+		String region = awsProperties.getRegion().getStaticRegion();
+		return String.format("https://%s.s3.%s.amazonaws.com/%s", bucket, region, s3Key);
+	}
+
 	private String createPresignedUrl(String s3Key, String mimeType) {
 		Date expiration = new Date(System.currentTimeMillis() + PRESIGNED_URL_EXPIRATION_MINUTES * 60 * 1000);
 
