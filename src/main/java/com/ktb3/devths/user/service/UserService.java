@@ -16,6 +16,10 @@ import com.ktb3.devths.global.exception.CustomException;
 import com.ktb3.devths.global.response.ErrorCode;
 import com.ktb3.devths.global.security.jwt.JwtTokenProvider;
 import com.ktb3.devths.global.security.jwt.JwtTokenValidator;
+import com.ktb3.devths.global.storage.domain.RefType;
+import com.ktb3.devths.global.storage.domain.S3Attachment;
+import com.ktb3.devths.global.storage.repository.S3AttachmentRepository;
+import com.ktb3.devths.global.storage.service.S3StorageService;
 import com.ktb3.devths.user.domain.Interests;
 import com.ktb3.devths.user.domain.UserRoles;
 import com.ktb3.devths.user.domain.entity.SocialAccount;
@@ -49,6 +53,8 @@ public class UserService {
 	private final JwtTokenProvider jwtTokenProvider;
 	private final JwtTokenService jwtTokenService;
 	private final TokenEncryptionService tokenEncryptionService;
+	private final S3AttachmentRepository s3AttachmentRepository;
+	private final S3StorageService s3StorageService;
 
 	@Transactional
 	public UserSignupResult signup(UserSignupRequest request) {
@@ -143,7 +149,15 @@ public class UserService {
 			.map(Interests::getDisplayName)
 			.collect(Collectors.toList());
 
-		return UserMeResponse.of(user, interestNames);
+		UserSignupResponse.ProfileImage profileImage = s3AttachmentRepository
+			.findTopByRefTypeAndRefIdAndIsDeletedFalseOrderByCreatedAtDesc(RefType.USER, userId)
+			.map(attachment -> new UserSignupResponse.ProfileImage(
+				attachment.getId(),
+				s3StorageService.getPublicUrl(attachment.getS3Key())
+			))
+			.orElse(null);
+
+		return UserMeResponse.of(user, interestNames, profileImage);
 	}
 
 	@Transactional
