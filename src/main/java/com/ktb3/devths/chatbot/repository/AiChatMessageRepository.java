@@ -1,0 +1,26 @@
+package com.ktb3.devths.chatbot.repository;
+
+import java.util.List;
+
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import com.ktb3.devths.chatbot.domain.entity.AiChatMessage;
+
+public interface AiChatMessageRepository extends JpaRepository<AiChatMessage, Long> {
+
+	@Query("SELECT m FROM AiChatMessage m " + "WHERE m.room.id = :roomId " + "ORDER BY m.createdAt DESC, m.id DESC")
+	List<AiChatMessage> findByRoomIdOrderByCreatedAtDesc(
+		@Param("roomId") Long roomId,
+		Pageable pageable
+	);
+
+	@Query("SELECT m FROM AiChatMessage m " + "WHERE m.room.id = :roomId " + "AND m.id < :lastId " + "ORDER BY m.createdAt DESC, m.id DESC")
+	List<AiChatMessage> findByRoomIdAndIdLessThanOrderByCreatedAtDesc(
+		@Param("roomId") Long roomId,
+		@Param("lastId") Long lastId,
+		Pageable pageable
+	);
+}
