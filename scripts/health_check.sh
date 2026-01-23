@@ -8,6 +8,12 @@ set -e
 
 APP_DIR=/home/ubuntu/app/be
 
+# APP_DIR 디렉토리 확인 및 생성
+if [ ! -d "$APP_DIR" ]; then
+  echo "📁 APP_DIR 디렉토리가 없습니다. 생성합니다: $APP_DIR"
+  mkdir -p $APP_DIR
+fi
+
 # 배포 환경 설정 로드
 if [ -f "$APP_DIR/deploy_env.sh" ]; then
   source $APP_DIR/deploy_env.sh
@@ -19,11 +25,20 @@ echo "==== [ValidateService] 헬스체크 시작 (브랜치: $BRANCH_NAME) ===="
 
 # 유휴 포트 확인 (새로 배포된 포트)
 if [ ! -f "$APP_DIR/idle_port.txt" ]; then
-  echo "❌ 유휴 포트 정보를 찾을 수 없습니다."
-  exit 1
-fi
+  echo "⚠️  유휴 포트 정보를 찾을 수 없습니다. 기본 포트를 사용합니다."
 
-IDLE_PORT=$(cat $APP_DIR/idle_port.txt)
+  # develop 브랜치는 항상 8080 사용
+  if [ "$BRANCH_NAME" = "develop" ]; then
+    IDLE_PORT=8080
+  else
+    # release/main 브랜치도 첫 배포는 8080
+    IDLE_PORT=8080
+  fi
+
+  echo "📍 기본 포트 사용: $IDLE_PORT"
+else
+  IDLE_PORT=$(cat $APP_DIR/idle_port.txt)
+fi
 HEALTH_CHECK_URL="http://localhost:$IDLE_PORT/actuator/health"
 
 echo "🏥 헬스체크 URL: $HEALTH_CHECK_URL"

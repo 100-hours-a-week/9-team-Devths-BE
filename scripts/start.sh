@@ -12,6 +12,12 @@ ENV_FILE=$APP_DIR/.env
 
 echo "==== [ApplicationStart] 애플리케이션 시작 ===="
 
+# APP_DIR 디렉토리 확인 및 생성
+if [ ! -d "$APP_DIR" ]; then
+  echo "📁 APP_DIR 디렉토리가 없습니다. 생성합니다: $APP_DIR"
+  mkdir -p $APP_DIR
+fi
+
 # 배포 환경 설정 로드
 if [ -f "$APP_DIR/deploy_env.sh" ]; then
   echo "🔧 배포 환경 설정을 로드합니다..."
@@ -21,17 +27,38 @@ if [ -f "$APP_DIR/deploy_env.sh" ]; then
   echo "  - Parameter Store 경로: $PARAMETER_STORE_PATH"
 else
   echo "⚠️  배포 환경 설정 파일을 찾을 수 없습니다. 기본값을 사용합니다."
+  export BRANCH_NAME="${BRANCH_NAME:-develop}"
   export SPRING_PROFILE="${SPRING_PROFILE:-prod}"
   export PARAMETER_STORE_PATH="${PARAMETER_STORE_PATH:-/devths/prod/}"
 fi
 
 # 유휴 포트 확인
 if [ ! -f "$APP_DIR/idle_port.txt" ]; then
-  echo "❌ 유휴 포트 정보를 찾을 수 없습니다."
-  exit 1
+  echo "⚠️  유휴 포트 정보를 찾을 수 없습니다. 기본값을 생성합니다."
+
+  # develop 브랜치는 항상 8080 사용
+  if [ "$BRANCH_NAME" = "develop" ]; then
+    IDLE_PORT=8080
+    echo "📍 개발 환경: 8080 포트 사용"
+  else
+    # release/main 브랜치: 블루그린 배포
+    # 실행 중인 프로세스 확인
+    if lsof -ti tcp:8080 > /dev/null 2>&1; then
+      IDLE_PORT=8081
+      echo "📍 BLUE(8080) 실행 중 → GREEN(8081) 사용"
+    else
+      IDLE_PORT=8080
+      echo "📍 첫 배포 → BLUE(8080) 사용"
+    fi
+  fi
+
+  # 파일 생성
+  echo $IDLE_PORT > $APP_DIR/idle_port.txt
+  echo "✅ idle_port.txt 생성: $IDLE_PORT"
+else
+  IDLE_PORT=$(cat $APP_DIR/idle_port.txt)
 fi
 
-IDLE_PORT=$(cat $APP_DIR/idle_port.txt)
 echo "🎯 배포 대상 포트: $IDLE_PORT"
 
 # JAR 파일 찾기
@@ -70,19 +97,20 @@ fi
 echo "✅ 환경변수 로드 완료"
 
 # 환경변수 로드
-source $ENV_FILE
+# shellcheck source=/dev/null
+source "$ENV_FILE"
 
 # 애플리케이션 시작
 echo "🚀 애플리케이션을 시작합니다..."
 
 nohup java -jar \
-  -Dserver.port=$IDLE_PORT \
-  -Dspring.profiles.active=${SPRING_PROFILE:-prod} \
-  $JAR_FILE \
-  > $DEPLOY_LOG 2>&1 &
+  -Dserver.port="$IDLE_PORT" \
+  -Dspring.profiles.active="${SPRING_PROFILE:-prod}" \
+  "$JAR_FILE" \
+  > "$DEPLOY_LOG" 2>&1 &
 
 APP_PID=$!
-echo $APP_PID > $APP_DIR/app_${IDLE_PORT}.pid
+echo "$APP_PID" > "$APP_DIR/app_${IDLE_PORT}.pid"
 
 echo "✅ 애플리케이션이 시작되었습니다 (PID: $APP_PID, PORT: $IDLE_PORT)"
 

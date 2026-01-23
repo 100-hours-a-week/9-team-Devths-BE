@@ -11,6 +11,12 @@ GREEN_PORT=8081
 APP_DIR=/home/ubuntu/app/be
 NGINX_CONF=/etc/nginx/conf.d/service-url.inc
 
+# APP_DIR 디렉토리 확인 및 생성
+if [ ! -d "$APP_DIR" ]; then
+  echo "📁 APP_DIR 디렉토리가 없습니다. 생성합니다: $APP_DIR"
+  mkdir -p $APP_DIR
+fi
+
 # 배포 환경 설정 로드
 if [ -f "$APP_DIR/deploy_env.sh" ]; then
   echo "🔧 배포 환경 설정 로드 중..."

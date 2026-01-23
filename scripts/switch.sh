@@ -9,6 +9,12 @@ set -e
 APP_DIR=/home/ubuntu/app/be
 NGINX_CONF=/etc/nginx/conf.d/service-url.inc
 
+# APP_DIR 디렉토리 확인 및 생성
+if [ ! -d "$APP_DIR" ]; then
+  echo "📁 APP_DIR 디렉토리가 없습니다. 생성합니다: $APP_DIR"
+  mkdir -p $APP_DIR
+fi
+
 # 배포 환경 설정 로드
 if [ -f "$APP_DIR/deploy_env.sh" ]; then
   echo "🔧 배포 환경 설정 로드 중..."
@@ -35,8 +41,32 @@ echo "📍 블루그린 배포 모드: 포트 스위칭을 진행합니다."
 
 # 현재 포트와 유휴 포트 확인
 if [ ! -f "$APP_DIR/current_port.txt" ] || [ ! -f "$APP_DIR/idle_port.txt" ]; then
-  echo "❌ 포트 정보를 찾을 수 없습니다."
-  exit 1
+  echo "⚠️  포트 정보를 찾을 수 없습니다. 첫 배포로 간주합니다."
+
+  # 첫 배포: 8080 포트를 사용하고, Nginx 설정만 업데이트
+  IDLE_PORT=8080
+  CURRENT_PORT=8080
+
+  echo "📍 첫 배포: 포트 $IDLE_PORT로 Nginx 설정을 생성합니다."
+
+  # Nginx 설정 파일 생성
+  echo "set \$service_url http://127.0.0.1:$IDLE_PORT;" | sudo tee "$NGINX_CONF" > /dev/null
+
+  # Nginx 설정 테스트
+  echo "🧪 Nginx 설정을 테스트합니다..."
+  if ! sudo nginx -t; then
+    echo "❌ Nginx 설정 테스트 실패"
+    exit 1
+  fi
+
+  # Nginx reload
+  echo "🔄 Nginx를 reload합니다..."
+  sudo nginx -s reload
+
+  echo "✅ Nginx가 포트 $IDLE_PORT로 설정되었습니다."
+  echo "==== [ValidateService] Nginx 포트 스위칭 완료 ===="
+  echo "🎉 첫 배포가 성공적으로 완료되었습니다! (포트: $IDLE_PORT)"
+  exit 0
 fi
 
 CURRENT_PORT=$(cat "$APP_DIR/current_port.txt")
