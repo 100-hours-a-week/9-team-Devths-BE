@@ -217,7 +217,7 @@ jobs:
             - Lint: ${{ steps.prep.outputs.branch_guard_allowed == 'true' && (needs.lint.result == 'success' && '✅' || '❌') || ' ⚪️ (브랜치 가드 차단)' }}
             - Static Analysis: ${{ steps.prep.outputs.branch_guard_allowed == 'true' && (needs.static_analysis.result == 'success' && '✅' || '❌') || ' ⚪️ (브랜치 가드 차단)' }}
 
-            ${{ needs.static_analysis.result != 'success' && '⚠️ **정적 분석 실패로 인해 파이프라인이 중단되었습니다.**' || '' }}
+            ${{ steps.prep.outputs.branch_guard_allowed == 'true' && needs.static_analysis.result == 'failure' && '⚠️ **정적 분석 실패로 인해 파이프라인이 중단되었습니다.**' || '' }}
 
             **🔗 링크**: [PR 확인하기](${{ github.event.pull_request.html_url }})
           color: "${{ steps.prep.outputs.branch_guard_allowed == 'true' && needs.lint.result == 'success' && needs.static_analysis.result == 'success' && 65280 || 16711680 }}"
