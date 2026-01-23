@@ -16,6 +16,10 @@ import com.ktb3.devths.global.exception.CustomException;
 import com.ktb3.devths.global.response.ErrorCode;
 import com.ktb3.devths.global.security.jwt.JwtTokenProvider;
 import com.ktb3.devths.global.security.jwt.JwtTokenValidator;
+import com.ktb3.devths.global.storage.domain.RefType;
+import com.ktb3.devths.global.storage.domain.S3Attachment;
+import com.ktb3.devths.global.storage.repository.S3AttachmentRepository;
+import com.ktb3.devths.global.storage.service.S3StorageService;
 import com.ktb3.devths.user.domain.Interests;
 import com.ktb3.devths.user.domain.UserRoles;
 import com.ktb3.devths.user.domain.entity.SocialAccount;
@@ -49,6 +53,8 @@ public class UserService {
 	private final JwtTokenProvider jwtTokenProvider;
 	private final JwtTokenService jwtTokenService;
 	private final TokenEncryptionService tokenEncryptionService;
+	private final S3AttachmentRepository s3AttachmentRepository;
+	private final S3StorageService s3StorageService;
 
 	@Transactional
 	public UserSignupResult signup(UserSignupRequest request) {
@@ -119,13 +125,36 @@ public class UserService {
 			throw new CustomException(ErrorCode.INVALID_INPUT);
 		}
 
+		// 프로필 사진 처리
+		UserSignupResponse.ProfileImage profileImage = null;
+		if (request.profileImageS3Key() != null && !request.profileImageS3Key().isBlank()) {
+			S3Attachment attachment = S3Attachment.builder()
+				.user(user)
+				.originalName("profile.jpg")
+				.s3Key(request.profileImageS3Key())
+				.mimeType("image/jpeg")
+				.category(null)
+				.fileSize(0L)
+				.refType(RefType.USER)
+				.refId(user.getId())
+				.sortOrder(0)
+				.build();
+
+			S3Attachment savedAttachment = s3AttachmentRepository.save(attachment);
+
+			profileImage = new UserSignupResponse.ProfileImage(
+				savedAttachment.getId(),
+				s3StorageService.getPublicUrl(savedAttachment.getS3Key())
+			);
+		}
+
 		TokenPair tokenPair = jwtTokenService.issueTokenPair(user);
 
 		List<String> interestNames = interests.stream()
 			.map(userInterest -> userInterest.getInterest().getDisplayName())
 			.collect(Collectors.toList());
 
-		UserSignupResponse response = UserSignupResponse.of(user, interestNames);
+		UserSignupResponse response = UserSignupResponse.of(user, interestNames, profileImage);
 
 		log.info("회원가입 성공: userId={}", user.getId());
 
@@ -143,7 +172,15 @@ public class UserService {
 			.map(Interests::getDisplayName)
 			.collect(Collectors.toList());
 
-		return UserMeResponse.of(user, interestNames);
+		UserSignupResponse.ProfileImage profileImage = s3AttachmentRepository
+			.findTopByRefTypeAndRefIdAndIsDeletedFalseOrderByCreatedAtDesc(RefType.USER, userId)
+			.map(attachment -> new UserSignupResponse.ProfileImage(
+				attachment.getId(),
+				s3StorageService.getPublicUrl(attachment.getS3Key())
+			))
+			.orElse(null);
+
+		return UserMeResponse.of(user, interestNames, profileImage);
 	}
 
 	@Transactional

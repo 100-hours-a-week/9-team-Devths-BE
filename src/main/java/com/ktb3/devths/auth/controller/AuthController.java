@@ -66,6 +66,7 @@ public class AuthController {
 	/**
 	 * 로그아웃
 	 */
+	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204")
 	@PostMapping("/logout")
 	public ResponseEntity<ApiResponse<Void>> logout(
 		@AuthenticationPrincipal UserPrincipal userPrincipal,

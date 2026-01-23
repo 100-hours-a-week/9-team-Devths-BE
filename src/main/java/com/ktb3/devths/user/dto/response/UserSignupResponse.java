@@ -10,10 +10,10 @@ public record UserSignupResponse(
 	UserStats stats,
 	List<String> interests
 ) {
-	public static UserSignupResponse of(User user, List<String> interests) {
+	public static UserSignupResponse of(User user, List<String> interests, ProfileImage profileImage) {
 		return new UserSignupResponse(
 			user.getNickname(),
-			null, // profileImage는 MVP에서 제외
+			profileImage,
 			new UserStats(0, 0), // followerCount, followingCount (MVP에서 0)
 			interests
 		);
