@@ -1,0 +1,56 @@
+name: Bug Issue Discord 알림
+
+on:
+  issues:
+    types: [ opened ]
+
+jobs:
+  notify-discord:
+    name: notify-discord
+    runs-on: ubuntu-22.04
+    if: contains(github.event.issue.labels.*.name, 'bug')
+    steps:
+      - name: 데이터 준비
+        id: prep
+        env:
+          USER_MAP: ${{ secrets.USER_MAP_JSON }}
+        run: |
+          set -euo pipefail
+
+          # 1. 제보자 매핑
+          LOGIN_ID="${{ github.event.issue.user.login }}"
+          REPORTER_TAG=$(echo "$USER_MAP" | jq -r --arg id "$LOGIN_ID" '.[$id] // $id')
+          echo "reporter=$REPORTER_TAG" >> $GITHUB_OUTPUT
+
+          # 2. 담당자(Assignees) 매핑
+          ASSIGNEES_JSON='${{ toJson(github.event.issue.assignees) }}'
+          ASSIGNEE_TAGS=$(echo "$ASSIGNEES_JSON" | jq -r --argjson map "$USER_MAP" '
+            if length == 0 then "" else [.[].login | ($map[.] // .)] | join(", ") end
+          ')
+          echo "assignees=${ASSIGNEE_TAGS:-없음}" >> $GITHUB_OUTPUT
+
+          # 3. 이슈 내용 정리 (너무 길면 잘라서 전송)
+          ISSUE_RAW_BODY=$(cat << 'EOF'
+          ${{ github.event.issue.body }}
+          EOF
+          )
+          ISSUE_BODY=$(echo "$ISSUE_RAW_BODY" | tr '\n' ' ' | tr -s ' ' | head -c 800)
+          echo "body=${ISSUE_BODY:-내용 없음}" >> $GITHUB_OUTPUT
+
+      - name: Discord Bug 이슈 알림
+        uses: sarisia/actions-status-discord@v1
+        with:
+          status: failure
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          title: "🐞 Bug Issue 발생"
+          description: |
+            **주소**: `${{ github.repository }}#${{ github.event.issue.number }}`
+            **링크**: [Issue 확인하기](${{ github.event.issue.html_url }})
+            **제목**: ${{ github.event.issue.title }}
+            **내용**: ${{ steps.prep.outputs.body }}
+
+            **제보자**: ${{ steps.prep.outputs.reporter }}
+            **담당자**: ${{ steps.prep.outputs.assignees }}
+          color: 16711680
+          username: GitHub Issue Bot
+          avatar_url: https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
