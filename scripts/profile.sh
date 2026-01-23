@@ -8,17 +8,18 @@ function find_idle_profile()
     RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/profile)
 
     # 응답이 없거나 400 이상이면 현재 구동 중인 서비스가 없다고 판단 -> set1 배포
-    if [ ${RESPONSE_CODE} -ge 400 ]; then
-        CURRENT_PROFILE=set2
+    # 응답이 없거나 400 이상이면 현재 구동 중인 서비스가 없다고 판단 -> set1 배포
+    if [ -z "${RESPONSE_CODE}" ] || [ "${RESPONSE_CODE}" -ge 400 ]; then
+        CURRENT_PROFILE="set2"
     else
         CURRENT_PROFILE=$(curl -s http://localhost/profile)
     fi
 
-    if [ ${CURRENT_PROFILE} == set1 ]
+    if [ "${CURRENT_PROFILE}" == "set1" ]
     then
-      IDLE_PROFILE=set2
+      IDLE_PROFILE="set2"
     else
-      IDLE_PROFILE=set1
+      IDLE_PROFILE="set1"
     fi
 
     echo "${IDLE_PROFILE}"

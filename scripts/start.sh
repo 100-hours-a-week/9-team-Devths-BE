@@ -27,7 +27,7 @@ fi
 echo "> 배포 파일 복사"
 APP_NAME="devths-be"
 REPOSITORY=/home/ubuntu/be
-BUILD_JAR=$(ls $REPOSITORY/deploy-package/application.jar)
+BUILD_JAR=$(ls $REPOSITORY/application.jar)
 
 echo "> 새 애플리케이션 배포"
 nohup java -jar \
