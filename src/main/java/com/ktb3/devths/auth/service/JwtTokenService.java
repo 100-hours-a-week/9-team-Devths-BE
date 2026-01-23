@@ -116,14 +116,4 @@ public class JwtTokenService {
 
 		return newTokenPair;
 	}
-
-	/**
-	 * 토큰 마스킹 (로깅용)
-	 */
-	private String maskToken(String token) {
-		if (token == null || token.length() < 10) {
-			return "***";
-		}
-		return token.substring(0, 10) + "***";
-	}
 }
