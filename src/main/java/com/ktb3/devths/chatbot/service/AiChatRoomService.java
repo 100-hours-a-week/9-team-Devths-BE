@@ -26,6 +26,7 @@ import lombok.RequiredArgsConstructor;
 public class AiChatRoomService {
 
 	private static final int DEFAULT_PAGE_SIZE = 10;
+	private static final int MAX_PAGE_SIZE = 100;
 	private static final String DEFAULT_TITLE = "새 채팅방";
 
 	private final AiChatRoomRepository aiChatRoomRepository;
@@ -72,7 +73,7 @@ public class AiChatRoomService {
 			throw new CustomException(ErrorCode.AI_CHATROOM_ACCESS_DENIED);
 		}
 
-		int pageSize = (size == null || size <= 0) ? DEFAULT_PAGE_SIZE : size;
+		int pageSize = (size == null || size <= 0) ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
 		Pageable pageable = PageRequest.of(0, pageSize + 1);
 
 		List<AiChatMessage> messages = (lastId == null)
@@ -84,7 +85,7 @@ public class AiChatRoomService {
 
 	@Transactional(readOnly = true)
 	public AiChatRoomListResponse getChatRoomList(Long userId, Integer size, Long lastId) {
-		int pageSize = (size == null || size <= 0) ? DEFAULT_PAGE_SIZE : size;
+		int pageSize = (size == null || size <= 0) ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
 
 		Pageable pageable = PageRequest.of(0, pageSize + 1);
 
