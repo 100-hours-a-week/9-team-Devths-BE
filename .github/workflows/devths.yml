@@ -299,14 +299,32 @@ jobs:
              echo "✅ 배포 성공"
           else
              echo "❌ 배포 실패"
-             # 실패 원인(Step) 조회
-             FAILED_INSTANCE=$(aws deploy list-deployment-instances --deployment-id $DEPLOYMENT_ID --instance-status-filter Failed --query "instancesList[0]" --output text)
-             if [ "$FAILED_INSTANCE" != "None" ] && [ -n "$FAILED_INSTANCE" ]; then
-               ERROR_STEP=$(aws deploy get-deployment-instance --deployment-id $DEPLOYMENT_ID --instance-id $FAILED_INSTANCE --query "instanceSummary.lifecycleEvents[?status=='Failed'].lifecycleEventName" --output text)
+          fi
+          
+          # Lifecycle Event 상세 조회 (단일 인스턴스 기준)
+          INSTANCE_ID=$(aws deploy list-deployment-instances --deployment-id $DEPLOYMENT_ID --query "instancesList[0]" --output text)
+          
+          if [ "$INSTANCE_ID" != "None" ] && [ -n "$INSTANCE_ID" ]; then
+            EVENTS=$(aws deploy get-deployment-instance --deployment-id $DEPLOYMENT_ID --instance-id $INSTANCE_ID --query "instanceSummary.lifecycleEvents")
+            
+            # 각 단계별 상태 추출 (Succeeded, Failed, Skipped, Pending, Unknown)
+            STATUS_DOWNLOAD=$(echo $EVENTS | jq -r '.[] | select(.lifecycleEventName=="DownloadBundle") | .status')
+            STATUS_APP_START=$(echo $EVENTS | jq -r '.[] | select(.lifecycleEventName=="ApplicationStart") | .status')
+            STATUS_VALIDATE=$(echo $EVENTS | jq -r '.[] | select(.lifecycleEventName=="ValidateService") | .status')
+            
+            echo "status_download=$STATUS_DOWNLOAD" >> $GITHUB_OUTPUT
+            echo "status_app_start=$STATUS_APP_START" >> $GITHUB_OUTPUT
+            echo "status_validate=$STATUS_VALIDATE" >> $GITHUB_OUTPUT
+            
+            # 실패 시 상세 원인 추출
+            if [ "$STATUS" != "Succeeded" ]; then
+               ERROR_STEP=$(echo $EVENTS | jq -r '.[] | select(.status=="Failed") | .lifecycleEventName')
                echo "error_step=$ERROR_STEP" >> $GITHUB_OUTPUT
-             else
-               echo "error_step=Unknown" >> $GITHUB_OUTPUT
-             fi
+            fi
+          else
+            echo "status_download=Unknown" >> $GITHUB_OUTPUT
+            echo "status_app_start=Unknown" >> $GITHUB_OUTPUT
+            echo "status_validate=Unknown" >> $GITHUB_OUTPUT
           fi
 
       - name: Discord CD 결과 알림
@@ -320,6 +338,12 @@ jobs:
             **CodeDeploy ID**: `${{ needs.deploy.outputs.deployment_id }}`
             
             **📊 배포 상태**: ${{ steps.cd-check.outputs.status }}
+            
+            **🔍 상세 진행 단계**:
+            - 📥 아티팩트 다운로드: ${{ steps.cd-check.outputs.status_download == 'Succeeded' && '✅Pass' || (steps.cd-check.outputs.status_download == 'Failed' && '❌Fail' || '⏭️Skip/Wait') }}
+            - 🚀 새 서비스 실행: ${{ steps.cd-check.outputs.status_app_start == 'Succeeded' && '✅Pass' || (steps.cd-check.outputs.status_app_start == 'Failed' && '❌Fail' || '⏭️Skip/Wait') }}
+            - 🔄 검증/전환/종료: ${{ steps.cd-check.outputs.status_validate == 'Succeeded' && '✅Pass' || (steps.cd-check.outputs.status_validate == 'Failed' && '❌Fail' || '⏭️Skip/Wait') }}
+
             ${{ steps.cd-check.outputs.status != 'Succeeded' && format('**⚠️ 실패 단계**: {0}', steps.cd-check.outputs.error_step) || '' }}
             
           color: "${{ steps.cd-check.outputs.status == 'Succeeded' && 65280 || 16711680 }}"
