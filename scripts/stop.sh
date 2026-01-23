@@ -62,8 +62,9 @@ if [ "$BRANCH_NAME" = "develop" ]; then
   fi
 
   # develop은 항상 8080 포트 사용
-  echo $BLUE_PORT > $APP_DIR/current_port.txt
-  echo $BLUE_PORT > $APP_DIR/idle_port.txt
+  # 포트 정보 파일 생성 (첫 배포 시 권한 문제 방지)
+  echo $BLUE_PORT > $APP_DIR/current_port.txt 2>/dev/null || echo "⚠️  포트 정보 파일 생성 실패 (첫 배포일 수 있음)"
+  echo $BLUE_PORT > $APP_DIR/idle_port.txt 2>/dev/null || true
 
 else
   # release, main 브랜치: 블루그린 배포
@@ -126,8 +127,9 @@ else
   fi
 
   # 현재/유휴 포트 정보를 파일로 저장 (다른 스크립트에서 사용)
-  echo $CURRENT_PORT > $APP_DIR/current_port.txt
-  echo $IDLE_PORT > $APP_DIR/idle_port.txt
+  # 포트 정보 파일 생성 (첫 배포 시 권한 문제 방지)
+  echo $CURRENT_PORT > $APP_DIR/current_port.txt 2>/dev/null || echo "⚠️  포트 정보 파일 생성 실패 (첫 배포일 수 있음)"
+  echo $IDLE_PORT > $APP_DIR/idle_port.txt 2>/dev/null || true
 fi
 
 echo "==== [ApplicationStop] 완료 ===="
