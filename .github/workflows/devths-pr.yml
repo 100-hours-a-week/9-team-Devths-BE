@@ -43,14 +43,14 @@ jobs:
 
   # CodeQL 기반 코드 정적 분석 실행
   static_analysis:
-    name: static-analysis
+    name: static_analysis
     runs-on: ubuntu-latest
     permissions:
       security-events: write
       actions: read
       contents: read
     strategy:
-      fail-fast: false
+      fail-fast: true  # 정적 분석 실패 시 즉시 중단
       matrix:
         language: [ java-kotlin ]
     # container 부분은 제거 (GitHub 기본 환경 사용 권장)
@@ -66,9 +66,10 @@ jobs:
           cache: 'gradle'
 
       - name: CodeQL 초기화
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
+          config-file: "./.github/codeql/code-ql-light.yml"
 
       - name: Build (Gradle)
         run: |
@@ -76,34 +77,47 @@ jobs:
           ./gradlew build -x test -x check
 
       - name: CodeQL 분석 수행
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
+          upload: true
+
+      - name: 보안 취약점 결과 확인 및 차단
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "⏳ 분석 결과가 GitHub에 반영되기를 기다리는 중 (10초)..."
+          sleep 10
+          
+          # 1. 현재 이벤트가 push인지 pr인지에 따라 검색할 REF 설정
+          # GITHUB_REF는 push일 땐 refs/heads/branch명, PR일 땐 refs/pull/번호/merge가 됩니다.
+          CURRENT_REF="${{ github.ref }}"
+          echo "📍 현재 Ref: $CURRENT_REF"
+          
+          # 2. API 호출하여 High/Critical 등급의 Open 상태인 알림 조회
+          ALERTS=$(gh api "repos/${{ github.repository }}/code-scanning/alerts?tool_name=CodeQL&state=open&ref=$CURRENT_REF" \
+            --jq '[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical")]')
+          
+          COUNT=$(echo "$ALERTS" | jq 'length')
+          
+          if [ "$COUNT" -gt 0 ]; then
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "❌ 보안 검사 실패: 고위험(High/Critical) 취약점 $COUNT개 발견"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "$ALERTS" | jq -r '.[] | "- [\(.rule.security_severity_level)] \(.rule.description) \n   위치: \(.most_recent_instance.location.path)"'
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            exit 1
+          else
+            echo "✅ 보안 검사 통과: 현재 커밋($CURRENT_REF)은 안전합니다."
+          fi
 
   # 추후 통합 테스트 과정 추가 예정
-
-  # 빌드
-  build:
-    name: build
-    runs-on: ubuntu-22.04
-    needs: [ lint, static_analysis ] # 테스트 통과 후 빌드
-    steps:
-      - name: 체크아웃
-        uses: actions/checkout@v4
-
-      - name: Java 및 Gradle 설치
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
-          cache: gradle
-
-      - name: 자바 빌드
-        run: ./gradlew clean build -x test -x check
 
   # 디스코드 알림 제공
   notify-discord:
     name: notify
     runs-on: ubuntu-22.04
-    needs: [ lint, static_analysis, build ]
+    needs: [ lint, static_analysis ]
     if: always()
     steps:
       - name: 데이터 준비
@@ -144,9 +158,9 @@ jobs:
       - name: Discord 빌드 알림
         uses: sarisia/actions-status-discord@v1
         with:
-          status: ${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && 'success' || 'failure' }}
+          status: ${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success') && 'success' || 'failure' }}
           webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          title: "${{ github.event.pull_request.base.ref }} PR [${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && '✅성공' || '❌실패' }}]"
+          title: "${{ github.event.pull_request.base.ref }} PR [${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success') && '✅성공' || '❌실패' }}]"
           description: |
             **PR 제목**: ${{ github.event.pull_request.title }}
             **작성자**: ${{ steps.prep.outputs.author }}
@@ -155,11 +169,12 @@ jobs:
             **경로**: `${{ github.event.pull_request.head.ref }}` → `${{ github.event.pull_request.base.ref }}`
             
             **📊 상세 결과**:
-            - Lint: ${{ needs.lint.result == 'success' && ' ✅' || ' ❌' }}
-            - Static Analysis: ${{ needs.static_analysis.result == 'success' && ' ✅' || ' ❌' }}
-            - Build: ${{ needs.build.result == 'success' && ' ✅' || ' ❌' }}
-            
+            - Lint: ${{ needs.lint.result == 'success' && '✅' || '❌' }}
+            - Static Analysis: ${{ needs.static_analysis.result == 'success' && '✅' || '❌' }}
+
+            ${{ needs.static_analysis.result != 'success' && '⚠️ **정적 분석 실패로 인해 파이프라인이 중단되었습니다.**' || '' }}
+
             **🔗 링크**: [PR 확인하기](${{ github.event.pull_request.html_url }})
-          color: "${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && 65280 || 16711680 }}"
+          color: "${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success') && 65280 || 16711680 }}"
           username: GitHub PR Bot
           avatar_url: https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
