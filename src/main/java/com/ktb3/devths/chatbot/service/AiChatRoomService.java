@@ -76,8 +76,8 @@ public class AiChatRoomService {
 		Pageable pageable = PageRequest.of(0, pageSize + 1);
 
 		List<AiChatMessage> messages = (lastId == null)
-			? aiChatMessageRepository.findByRoomIdOrderByCreatedAtDesc(roomId, pageable)
-			: aiChatMessageRepository.findByRoomIdAndIdLessThanOrderByCreatedAtDesc(roomId, lastId, pageable);
+			? aiChatMessageRepository.findByRoomIdOrderByCreatedAtAsc(roomId, pageable)
+			: aiChatMessageRepository.findByRoomIdAndIdLessThanOrderByCreatedAtAsc(roomId, lastId, pageable);
 
 		return AiChatMessageListResponse.of(messages, pageSize);
 	}
