@@ -11,14 +11,14 @@ import com.ktb3.devths.chatbot.domain.entity.AiChatMessage;
 
 public interface AiChatMessageRepository extends JpaRepository<AiChatMessage, Long> {
 
-	@Query("SELECT m FROM AiChatMessage m " + "WHERE m.room.id = :roomId " + "ORDER BY m.createdAt DESC, m.id DESC")
-	List<AiChatMessage> findByRoomIdOrderByCreatedAtDesc(
+	@Query("SELECT m FROM AiChatMessage m " + "WHERE m.room.id = :roomId " + "ORDER BY m.createdAt ASC, m.id ASC")
+	List<AiChatMessage> findByRoomIdOrderByCreatedAtAsc(
 		@Param("roomId") Long roomId,
 		Pageable pageable
 	);
 
-	@Query("SELECT m FROM AiChatMessage m " + "WHERE m.room.id = :roomId " + "AND m.id < :lastId " + "ORDER BY m.createdAt DESC, m.id DESC")
-	List<AiChatMessage> findByRoomIdAndIdLessThanOrderByCreatedAtDesc(
+	@Query("SELECT m FROM AiChatMessage m " + "WHERE m.room.id = :roomId " + "AND m.id > :lastId " + "ORDER BY m.createdAt ASC, m.id ASC")
+	List<AiChatMessage> findByRoomIdAndIdLessThanOrderByCreatedAtAsc(
 		@Param("roomId") Long roomId,
 		@Param("lastId") Long lastId,
 		Pageable pageable
