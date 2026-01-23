@@ -10,7 +10,6 @@ import org.springframework.stereotype.Component;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ktb3.devths.global.response.ApiResponse;
 import com.ktb3.devths.global.response.ErrorCode;
-import com.ktb3.devths.global.util.LogSanitizer;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -27,9 +26,7 @@ public class CustomAccessDeniedHandler implements AccessDeniedHandler {
 	public void handle(HttpServletRequest request, HttpServletResponse response,
 		AccessDeniedException accessDeniedException) throws IOException {
 
-		log.warn("접근 권한 없음 - URI: {}, IP: {}",
-			LogSanitizer.sanitize(request.getRequestURI()),
-			LogSanitizer.sanitize(request.getRemoteAddr()));
+		log.warn("접근 권한 없음");
 
 		response.setStatus(HttpServletResponse.SC_FORBIDDEN);
 		response.setContentType(MediaType.APPLICATION_JSON_VALUE);

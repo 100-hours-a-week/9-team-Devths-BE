@@ -10,7 +10,6 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.ktb3.devths.global.security.UserPrincipal;
-import com.ktb3.devths.global.util.LogSanitizer;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -56,9 +55,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 				log.debug("JWT 검증 성공 - userId: {}", userId);
 			}
 		} catch (Exception e) {
-			log.warn("JWT 인증 실패: {} - URI: {}",
-				LogSanitizer.sanitize(e.getMessage()),
-				LogSanitizer.sanitize(request.getRequestURI()));
+			log.warn("JWT 인증 실패");
 		}
 
 		filterChain.doFilter(request, response);
