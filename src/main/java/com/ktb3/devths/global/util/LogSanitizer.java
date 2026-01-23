@@ -23,4 +23,22 @@ public final class LogSanitizer {
 		}
 		return input.replaceAll("[\r\n]", " ");
 	}
+
+	/**
+	 * URI를 로그에 안전하게 기록할 수 있도록 sanitize합니다.
+	 * 쿼리 스트링을 제거하고 path만 추출한 후, 개행 문자를 제거합니다.
+	 *
+	 * @param uri sanitize할 URI 문자열
+	 * @return sanitize된 URI path (null 입력 시 "null" 반환)
+	 */
+	public static String sanitizeUri(String uri) {
+		if (uri == null) {
+			return "null";
+		}
+		// 쿼리 스트링 제거 (? 이전까지만 추출)
+		int queryIndex = uri.indexOf('?');
+		String path = queryIndex != -1 ? uri.substring(0, queryIndex) : uri;
+		// CRLF 제거
+		return path.replaceAll("[\r\n]", " ");
+	}
 }
