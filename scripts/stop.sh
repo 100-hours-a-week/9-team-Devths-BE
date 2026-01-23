@@ -11,10 +11,12 @@ GREEN_PORT=8081
 APP_DIR=/home/ubuntu/app/be
 NGINX_CONF=/etc/nginx/conf.d/service-url.inc
 
-# APP_DIR 디렉토리 확인 및 생성
+# APP_DIR 디렉토리 확인 및 생성 (sudo 사용)
 if [ ! -d "$APP_DIR" ]; then
   echo "📁 APP_DIR 디렉토리가 없습니다. 생성합니다: $APP_DIR"
-  mkdir -p $APP_DIR
+  sudo mkdir -p $APP_DIR
+  sudo chown ubuntu:ubuntu $APP_DIR
+  sudo chmod 755 $APP_DIR
 fi
 
 # 배포 환경 설정 로드
@@ -62,9 +64,8 @@ if [ "$BRANCH_NAME" = "develop" ]; then
   fi
 
   # develop은 항상 8080 포트 사용
-  # 포트 정보 파일 생성 (첫 배포 시 권한 문제 방지)
-  echo $BLUE_PORT > $APP_DIR/current_port.txt 2>/dev/null || echo "⚠️  포트 정보 파일 생성 실패 (첫 배포일 수 있음)"
-  echo $BLUE_PORT > $APP_DIR/idle_port.txt 2>/dev/null || true
+  echo $BLUE_PORT > $APP_DIR/current_port.txt
+  echo $BLUE_PORT > $APP_DIR/idle_port.txt
 
 else
   # release, main 브랜치: 블루그린 배포
@@ -127,9 +128,8 @@ else
   fi
 
   # 현재/유휴 포트 정보를 파일로 저장 (다른 스크립트에서 사용)
-  # 포트 정보 파일 생성 (첫 배포 시 권한 문제 방지)
-  echo $CURRENT_PORT > $APP_DIR/current_port.txt 2>/dev/null || echo "⚠️  포트 정보 파일 생성 실패 (첫 배포일 수 있음)"
-  echo $IDLE_PORT > $APP_DIR/idle_port.txt 2>/dev/null || true
+  echo $CURRENT_PORT > $APP_DIR/current_port.txt
+  echo $IDLE_PORT > $APP_DIR/idle_port.txt
 fi
 
 echo "==== [ApplicationStop] 완료 ===="

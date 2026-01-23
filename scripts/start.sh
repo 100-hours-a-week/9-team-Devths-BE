@@ -12,10 +12,12 @@ ENV_FILE=$APP_DIR/.env
 
 echo "==== [ApplicationStart] 애플리케이션 시작 ===="
 
-# APP_DIR 디렉토리 확인 및 생성
+# APP_DIR 디렉토리 확인 및 생성 (sudo 사용)
 if [ ! -d "$APP_DIR" ]; then
   echo "📁 APP_DIR 디렉토리가 없습니다. 생성합니다: $APP_DIR"
-  mkdir -p $APP_DIR
+  sudo mkdir -p $APP_DIR
+  sudo chown ubuntu:ubuntu $APP_DIR
+  sudo chmod 755 $APP_DIR
 fi
 
 # 배포 환경 설정 로드
@@ -32,16 +34,19 @@ else
   export PARAMETER_STORE_PATH="${PARAMETER_STORE_PATH:-/devths/prod/}"
 fi
 
-# 유휴 포트 확인
-if [ ! -f "$APP_DIR/idle_port.txt" ]; then
-  echo "⚠️  유휴 포트 정보를 찾을 수 없습니다. 기본값을 생성합니다."
+BRANCH_NAME="${BRANCH_NAME:-develop}"
 
-  # develop 브랜치는 항상 8080 사용
-  if [ "$BRANCH_NAME" = "develop" ]; then
-    IDLE_PORT=8080
-    echo "📍 개발 환경: 8080 포트 사용"
-  else
-    # release/main 브랜치: 블루그린 배포
+# develop 브랜치: 블루그린 없이 8080 포트에서 단순 재시작
+if [ "$BRANCH_NAME" = "develop" ]; then
+  echo "📍 개발 환경: 8080 포트에서 단순 재시작합니다."
+  IDLE_PORT=8080
+else
+  # release/main 브랜치: 블루그린 배포
+  echo "📍 블루그린 배포 모드: 유휴 포트를 확인합니다."
+
+  if [ ! -f "$APP_DIR/idle_port.txt" ]; then
+    echo "⚠️  유휴 포트 정보를 찾을 수 없습니다. 첫 배포로 간주합니다."
+
     # 실행 중인 프로세스 확인
     if lsof -ti tcp:8080 > /dev/null 2>&1; then
       IDLE_PORT=8081
@@ -50,13 +55,13 @@ if [ ! -f "$APP_DIR/idle_port.txt" ]; then
       IDLE_PORT=8080
       echo "📍 첫 배포 → BLUE(8080) 사용"
     fi
-  fi
 
-  # 파일 생성
-  echo $IDLE_PORT > $APP_DIR/idle_port.txt
-  echo "✅ idle_port.txt 생성: $IDLE_PORT"
-else
-  IDLE_PORT=$(cat $APP_DIR/idle_port.txt)
+    # 파일 생성
+    echo $IDLE_PORT > $APP_DIR/idle_port.txt
+    echo "✅ idle_port.txt 생성: $IDLE_PORT"
+  else
+    IDLE_PORT=$(cat $APP_DIR/idle_port.txt)
+  fi
 fi
 
 echo "🎯 배포 대상 포트: $IDLE_PORT"

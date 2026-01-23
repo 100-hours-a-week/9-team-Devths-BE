@@ -8,10 +8,12 @@ set -e
 
 APP_DIR=/home/ubuntu/app/be
 
-# APP_DIR 디렉토리 확인 및 생성
+# APP_DIR 디렉토리 확인 및 생성 (sudo 사용)
 if [ ! -d "$APP_DIR" ]; then
   echo "📁 APP_DIR 디렉토리가 없습니다. 생성합니다: $APP_DIR"
-  mkdir -p $APP_DIR
+  sudo mkdir -p $APP_DIR
+  sudo chown ubuntu:ubuntu $APP_DIR
+  sudo chmod 755 $APP_DIR
 fi
 
 # 배포 환경 설정 로드
@@ -23,21 +25,21 @@ BRANCH_NAME="${BRANCH_NAME:-develop}"
 
 echo "==== [ValidateService] 헬스체크 시작 (브랜치: $BRANCH_NAME) ===="
 
-# 유휴 포트 확인 (새로 배포된 포트)
-if [ ! -f "$APP_DIR/idle_port.txt" ]; then
-  echo "⚠️  유휴 포트 정보를 찾을 수 없습니다. 기본 포트를 사용합니다."
-
-  # develop 브랜치는 항상 8080 사용
-  if [ "$BRANCH_NAME" = "develop" ]; then
-    IDLE_PORT=8080
-  else
-    # release/main 브랜치도 첫 배포는 8080
-    IDLE_PORT=8080
-  fi
-
-  echo "📍 기본 포트 사용: $IDLE_PORT"
+# develop 브랜치: 블루그린 없이 8080 포트 고정
+if [ "$BRANCH_NAME" = "develop" ]; then
+  echo "📍 개발 환경: 8080 포트 헬스체크"
+  IDLE_PORT=8080
 else
-  IDLE_PORT=$(cat $APP_DIR/idle_port.txt)
+  # release/main 브랜치: 블루그린 배포
+  echo "📍 블루그린 배포 모드: 유휴 포트를 확인합니다."
+
+  if [ ! -f "$APP_DIR/idle_port.txt" ]; then
+    echo "⚠️  유휴 포트 정보를 찾을 수 없습니다. 기본 포트를 사용합니다."
+    IDLE_PORT=8080
+    echo "📍 기본 포트 사용: $IDLE_PORT"
+  else
+    IDLE_PORT=$(cat $APP_DIR/idle_port.txt)
+  fi
 fi
 HEALTH_CHECK_URL="http://localhost:$IDLE_PORT/actuator/health"
 

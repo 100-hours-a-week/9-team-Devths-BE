@@ -9,10 +9,12 @@ set -e
 APP_DIR=/home/ubuntu/app/be
 NGINX_CONF=/etc/nginx/conf.d/service-url.inc
 
-# APP_DIR 디렉토리 확인 및 생성
+# APP_DIR 디렉토리 확인 및 생성 (sudo 사용)
 if [ ! -d "$APP_DIR" ]; then
   echo "📁 APP_DIR 디렉토리가 없습니다. 생성합니다: $APP_DIR"
-  mkdir -p $APP_DIR
+  sudo mkdir -p $APP_DIR
+  sudo chown ubuntu:ubuntu $APP_DIR
+  sudo chmod 755 $APP_DIR
 fi
 
 # 배포 환경 설정 로드
