@@ -5,7 +5,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.ktb3.devths.global.exception.CustomException;
 import com.ktb3.devths.global.response.ErrorCode;
-import com.ktb3.devths.global.storage.domain.S3Attachment;
+import com.ktb3.devths.global.storage.domain.entity.S3Attachment;
 import com.ktb3.devths.global.storage.dto.request.FileAttachmentRequest;
 import com.ktb3.devths.global.storage.dto.response.FileAttachmentResponse;
 import com.ktb3.devths.global.storage.repository.S3AttachmentRepository;

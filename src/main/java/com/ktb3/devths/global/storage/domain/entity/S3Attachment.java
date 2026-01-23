@@ -1,10 +1,12 @@
-package com.ktb3.devths.global.storage.domain;
+package com.ktb3.devths.global.storage.domain.entity;
 
 import java.time.LocalDateTime;
 
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+import com.ktb3.devths.global.storage.domain.constant.FileCategory;
+import com.ktb3.devths.global.storage.domain.constant.RefType;
 import com.ktb3.devths.user.domain.entity.User;
 
 import jakarta.persistence.Column;

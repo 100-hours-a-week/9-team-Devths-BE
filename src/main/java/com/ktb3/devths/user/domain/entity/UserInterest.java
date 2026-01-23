@@ -1,6 +1,6 @@
 package com.ktb3.devths.user.domain.entity;
 
-import com.ktb3.devths.user.domain.Interests;
+import com.ktb3.devths.user.domain.constant.Interests;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
