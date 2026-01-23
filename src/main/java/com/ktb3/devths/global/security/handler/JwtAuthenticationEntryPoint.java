@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ktb3.devths.global.response.ApiResponse;
 import com.ktb3.devths.global.response.ErrorCode;
+import com.ktb3.devths.global.util.LogSanitizer;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -26,7 +27,9 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
 	public void commence(HttpServletRequest request, HttpServletResponse response,
 		AuthenticationException authException) throws IOException {
 
-		log.warn("인증 실패 - URI: {}, IP: {}", request.getRequestURI(), request.getRemoteAddr());
+		log.warn("인증 실패 - URI: {}, IP: {}",
+			LogSanitizer.sanitize(request.getRequestURI()),
+			LogSanitizer.sanitize(request.getRemoteAddr()));
 
 		response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
 		response.setContentType(MediaType.APPLICATION_JSON_VALUE);

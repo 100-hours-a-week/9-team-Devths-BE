@@ -30,6 +30,7 @@ public class TokenEncryptionService {
 	private static final String ALGORITHM = "AES/GCM/NoPadding";
 	private static final int GCM_TAG_LENGTH = 128;
 	private static final int GCM_IV_LENGTH = 12;
+	private static final int MAX_TOKEN_LENGTH = 10240; // 10KB
 
 	private final EncryptionProperties encryptionProperties;
 
@@ -40,6 +41,13 @@ public class TokenEncryptionService {
 	 * @return Base64 인코딩된 암호화 토큰 (IV + 암호문)
 	 */
 	public String encrypt(String plainToken) {
+		if (plainToken == null || plainToken.isEmpty()) {
+			throw new CustomException(ErrorCode.INTERNAL_SERVER_ERROR);
+		}
+		if (plainToken.length() > MAX_TOKEN_LENGTH) {
+			log.error("토큰 암호화 실패: 입력 길이 초과 ({}바이트)", plainToken.length());
+			throw new CustomException(ErrorCode.INTERNAL_SERVER_ERROR);
+		}
 		try {
 			SecretKey key = getSecretKey();
 

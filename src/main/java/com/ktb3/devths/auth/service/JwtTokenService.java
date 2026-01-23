@@ -87,7 +87,7 @@ public class JwtTokenService {
 		// 1. RT로 DB 조회 (RTR 검증)
 		UserToken userToken = userTokenRepository.findByRefreshToken(refreshToken)
 			.orElseThrow(() -> {
-				log.warn("재사용된 Refresh Token 감지: token={}...", maskToken(refreshToken));
+				log.warn("재사용된 Refresh Token 감지");
 				return new CustomException(ErrorCode.REFRESH_TOKEN_REUSED);
 			});
 
