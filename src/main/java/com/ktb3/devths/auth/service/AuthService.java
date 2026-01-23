@@ -15,7 +15,7 @@ import com.ktb3.devths.auth.dto.response.LoginResponse;
 import com.ktb3.devths.global.exception.CustomException;
 import com.ktb3.devths.global.response.ErrorCode;
 import com.ktb3.devths.global.security.jwt.JwtTokenProvider;
-import com.ktb3.devths.user.domain.Interests;
+import com.ktb3.devths.user.domain.constant.Interests;
 import com.ktb3.devths.user.domain.entity.SocialAccount;
 import com.ktb3.devths.user.domain.entity.User;
 import com.ktb3.devths.user.repository.SocialAccountRepository;
