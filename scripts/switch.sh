@@ -33,6 +33,26 @@ echo "==== [ValidateService] Nginx 포트 스위칭 (브랜치: $BRANCH_NAME) ==
 # develop 브랜치: 스위칭 없이 종료
 if [ "$BRANCH_NAME" = "develop" ]; then
   echo "📍 개발 환경: 포트 스위칭을 건너뜁니다 (8080 포트 고정)."
+
+  # Nginx 설정 활성화 및 reload
+  NGINX_SITES_AVAILABLE=/etc/nginx/sites-available
+  NGINX_SITES_ENABLED=/etc/nginx/sites-enabled
+
+  if [ ! -L "$NGINX_SITES_ENABLED/dev-api" ]; then
+    echo "🔧 dev-api Nginx 설정 활성화 중..."
+    sudo ln -sf "$NGINX_SITES_AVAILABLE/dev-api" "$NGINX_SITES_ENABLED/dev-api"
+  fi
+
+  # Nginx 설정 테스트 및 reload
+  echo "🔄 Nginx reload 중..."
+  if sudo nginx -t; then
+    sudo nginx -s reload
+    echo "✅ Nginx reload 완료"
+  else
+    echo "❌ Nginx 설정 테스트 실패"
+    exit 1
+  fi
+
   echo "✅ 배포가 완료되었습니다 (포트: 8080)."
   echo "==== [ValidateService] Nginx 포트 스위칭 완료 ===="
   exit 0
@@ -128,6 +148,38 @@ fi
 rm -f "$APP_DIR/app_${CURRENT_PORT}.pid"
 
 echo "==== [ValidateService] Nginx 포트 스위칭 완료 ===="
+
+# Maintenance 모드 해제
+echo "🔧 Maintenance 모드 해제 중..."
+
+# 브랜치별 설정 파일명 결정
+if [ "$BRANCH_NAME" = "main" ]; then
+  NGINX_CONFIG="prod-api"
+elif [ "$BRANCH_NAME" = "release" ]; then
+  NGINX_CONFIG="staging-api"
+fi
+
+# Maintenance 임시 설정 제거 및 정상 설정 활성화
+NGINX_SITES_AVAILABLE=/etc/nginx/sites-available
+NGINX_SITES_ENABLED=/etc/nginx/sites-enabled
+
+if [ -L "$NGINX_SITES_ENABLED/${NGINX_CONFIG}-maintenance" ]; then
+  sudo rm "$NGINX_SITES_ENABLED/${NGINX_CONFIG}-maintenance"
+fi
+
+if [ ! -L "$NGINX_SITES_ENABLED/$NGINX_CONFIG" ]; then
+  sudo ln -sf "$NGINX_SITES_AVAILABLE/$NGINX_CONFIG" "$NGINX_SITES_ENABLED/$NGINX_CONFIG"
+fi
+
+# Nginx reload
+if sudo nginx -t; then
+  sudo nginx -s reload
+  echo "✅ Maintenance 모드가 해제되었습니다."
+else
+  echo "❌ Nginx 설정 테스트 실패"
+  exit 1
+fi
+
 echo "🎉 블루그린 배포가 성공적으로 완료되었습니다!"
 echo "   - 이전 포트: $CURRENT_PORT (종료됨)"
 echo "   - 현재 포트: $IDLE_PORT (운영 중)"

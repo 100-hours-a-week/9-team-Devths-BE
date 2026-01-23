@@ -27,6 +27,16 @@ permissions:
       - file
 
 hooks:
+  BeforeInstall:
+    - location: scripts/before_install.sh
+      timeout: 60
+      runas: ubuntu
+
+  AfterInstall:
+    - location: scripts/after_install.sh
+      timeout: 60
+      runas: ubuntu
+
   ApplicationStop:
     - location: scripts/stop.sh
       timeout: 60
