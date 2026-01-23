@@ -31,6 +31,7 @@ public class TokenEncryptionService {
 	private static final int GCM_TAG_LENGTH = 128;
 	private static final int GCM_IV_LENGTH = 12;
 	private static final int MAX_TOKEN_LENGTH = 10240; // 10KB
+	private static final int MAX_ENCRYPTED_LENGTH = MAX_TOKEN_LENGTH + 16; // 평문 + GCM 태그
 
 	private final EncryptionProperties encryptionProperties;
 
@@ -65,7 +66,14 @@ public class TokenEncryptionService {
 			byte[] encryptedBytes = cipher.doFinal(plainToken.getBytes());
 
 			// IV + 암호문을 하나의 바이트 배열로 결합
-			ByteBuffer byteBuffer = ByteBuffer.allocate(iv.length + encryptedBytes.length);
+			// 암호문 길이 검증 (오버플로우 방지)
+			if (encryptedBytes.length > MAX_ENCRYPTED_LENGTH) {
+				log.error("암호문 길이 초과: {}바이트", encryptedBytes.length);
+				throw new CustomException(ErrorCode.INTERNAL_SERVER_ERROR);
+			}
+
+			int bufferSize = GCM_IV_LENGTH + encryptedBytes.length;
+			ByteBuffer byteBuffer = ByteBuffer.allocate(bufferSize);
 			byteBuffer.put(iv);
 			byteBuffer.put(encryptedBytes);
 
