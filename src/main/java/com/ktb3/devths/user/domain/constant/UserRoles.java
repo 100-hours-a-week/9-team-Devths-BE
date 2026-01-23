@@ -1,4 +1,4 @@
-package com.ktb3.devths.user.domain;
+package com.ktb3.devths.user.domain.constant;
 
 public enum UserRoles {
 	ROLE_USER,

@@ -1,7 +1,7 @@
 package com.ktb3.devths.global.storage.dto.request;
 
-import com.ktb3.devths.global.storage.domain.FileCategory;
-import com.ktb3.devths.global.storage.domain.RefType;
+import com.ktb3.devths.global.storage.domain.constant.FileCategory;
+import com.ktb3.devths.global.storage.domain.constant.RefType;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
