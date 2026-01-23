@@ -3,23 +3,23 @@ os: linux
 
 files:
   - source: /
-    destination: /home/ubuntu/app
+    destination: /home/ubuntu/app/be
     overwrite: yes
 
 permissions:
-  - object: /home/ubuntu/app
+  - object: /home/ubuntu/app/be
     owner: ubuntu
     group: ubuntu
     mode: 755
     type:
       - directory
-  - object: /home/ubuntu/app/scripts
+  - object: /home/ubuntu/app/be/scripts
     owner: ubuntu
     group: ubuntu
     mode: 755
     type:
       - directory
-  - object: /home/ubuntu/app/scripts/*.sh
+  - object: /home/ubuntu/app/be/scripts/*.sh
     owner: ubuntu
     group: ubuntu
     mode: 755

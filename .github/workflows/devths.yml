@@ -12,7 +12,11 @@ env:
   S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
   S3_PREFIX: BE/${{ github.ref_name }}
   CODEDEPLOY_APPLICATION: ${{ secrets.CODEDEPLOY_APPLICATION }}
-  CODEDEPLOY_DEPLOYMENT_GROUP: ${{ secrets.CODEDEPLOY_DEPLOYMENT_GROUP }}
+  CODEDEPLOY_DEPLOYMENT_GROUP: >-
+    ${{ github.ref_name == 'main' && secrets.CODE_DEPLOY_GROUP_NAME_PROD || 
+        github.ref_name == 'release' && secrets.CODE_DEPLOY_GROUP_NAME_STAGING || 
+        secrets.CODE_DEPLOY_GROUP_NAME_DEV 
+    }}
 
 jobs:
   # Lint 설정
@@ -205,7 +209,7 @@ jobs:
           # 배포 환경 설정
           export BRANCH_NAME="${{ github.ref_name }}"
           export SPRING_PROFILE="${{ github.ref_name == 'main' && 'prod' || (github.ref_name == 'release' && 'staging' || 'dev') }}"
-          export PARAMETER_STORE_PATH="${{ github.ref_name == 'main' && '/devths/prod/' || (github.ref_name == 'release' && '/devths/staging/' || '/devths/dev/') }}"
+          export PARAMETER_STORE_PATH="${{ github.ref_name == 'main' && '/Prod/BE' || (github.ref_name == 'release' && '/Staging/BE' || '/Dev/BE') }}"
           EOF
 
           # 6. ZIP 패키지 생성

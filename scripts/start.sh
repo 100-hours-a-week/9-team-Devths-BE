@@ -1,10 +1,12 @@
 #!/bin/bash
 
 # 블루그린 배포 - 유휴 포트에서 새 애플리케이션 시작
+# develop 브랜치는 단순 재시작 (8080 포트 고정)
+# release, main 브랜치는 블루그린 배포
 
 set -e
 
-APP_DIR=/home/ubuntu/app
+APP_DIR=/home/ubuntu/app/be
 DEPLOY_LOG=$APP_DIR/deploy.log
 ENV_FILE=$APP_DIR/.env
 

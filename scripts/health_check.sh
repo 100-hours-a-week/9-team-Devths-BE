@@ -1,12 +1,21 @@
 #!/bin/bash
 
 # 블루그린 배포 - Actuator 기반 헬스체크
+# develop 브랜치는 단순 재시작 (8080 포트 고정)
+# release, main 브랜치는 블루그린 배포
 
 set -e
 
-APP_DIR=/home/ubuntu/app
+APP_DIR=/home/ubuntu/app/be
 
-echo "==== [ValidateService] 헬스체크 시작 ===="
+# 배포 환경 설정 로드
+if [ -f "$APP_DIR/deploy_env.sh" ]; then
+  source $APP_DIR/deploy_env.sh
+fi
+
+BRANCH_NAME="${BRANCH_NAME:-develop}"
+
+echo "==== [ValidateService] 헬스체크 시작 (브랜치: $BRANCH_NAME) ===="
 
 # 유휴 포트 확인 (새로 배포된 포트)
 if [ ! -f "$APP_DIR/idle_port.txt" ]; then
