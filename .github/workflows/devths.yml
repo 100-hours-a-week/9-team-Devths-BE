@@ -329,10 +329,11 @@ jobs:
 
       - name: Discord CD 결과 알림
         uses: sarisia/actions-status-discord@v1
+        if: always()
         with:
           status: ${{ steps.cd-check.outputs.status == 'Succeeded' && 'success' || 'failure' }}
           webhook: ${{ secrets.DISCORD_WEBHOOK_NON_PROD_URL }}
-          title: "🚀 배포(CD) 결과 [${{ steps.cd-check.outputs.status == 'Succeeded' && '✅성공' || '❌실패' }}]"
+          title: "배포(CD) 결과 [${{ steps.cd-check.outputs.status == 'Succeeded' && '✅성공' || '❌실패' }}]"
           description: |
             **브랜치**: `${{ github.ref_name }}`
             **CodeDeploy ID**: `${{ needs.deploy.outputs.deployment_id }}`
@@ -340,9 +341,9 @@ jobs:
             **📊 배포 상태**: ${{ steps.cd-check.outputs.status }}
             
             **🔍 상세 진행 단계**:
-            - 📥 아티팩트 다운로드: ${{ steps.cd-check.outputs.status_download == 'Succeeded' && '✅Pass' || (steps.cd-check.outputs.status_download == 'Failed' && '❌Fail' || '⏭️Skip/Wait') }}
-            - 🚀 새 서비스 실행: ${{ steps.cd-check.outputs.status_app_start == 'Succeeded' && '✅Pass' || (steps.cd-check.outputs.status_app_start == 'Failed' && '❌Fail' || '⏭️Skip/Wait') }}
-            - 🔄 검증/전환/종료: ${{ steps.cd-check.outputs.status_validate == 'Succeeded' && '✅Pass' || (steps.cd-check.outputs.status_validate == 'Failed' && '❌Fail' || '⏭️Skip/Wait') }}
+            - 아티팩트 다운로드: ${{ steps.cd-check.outputs.status_download == 'Succeeded' && '✅Pass' || (steps.cd-check.outputs.status_download == 'Failed' && '❌Fail' || '⏭️Skip/Wait') }}
+            - 새 서비스 실행: ${{ steps.cd-check.outputs.status_app_start == 'Succeeded' && '✅Pass' || (steps.cd-check.outputs.status_app_start == 'Failed' && '❌Fail' || '⏭️Skip/Wait') }}
+            - 검증/전환/종료: ${{ steps.cd-check.outputs.status_validate == 'Succeeded' && '✅Pass' || (steps.cd-check.outputs.status_validate == 'Failed' && '❌Fail' || '⏭️Skip/Wait') }}
 
             ${{ steps.cd-check.outputs.status != 'Succeeded' && format('**⚠️ 실패 단계**: {0}', steps.cd-check.outputs.error_step) || '' }}
             
