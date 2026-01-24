@@ -27,13 +27,19 @@ fi
 echo "> 배포 파일 복사"
 APP_NAME="devths-be"
 REPOSITORY=/home/ubuntu/be
+
+# 로그 디렉토리 생성
+mkdir -p $REPOSITORY/logs
+LOG_FILE=$REPOSITORY/logs/application.log
+
 BUILD_JAR=$(ls $REPOSITORY/application.jar)
 
 echo "> 새 애플리케이션 배포"
 nohup java -jar \
-    -Dspring.config.location=classpath:/application.yml,classpath:/application-$IDLE_PROFILE.yml \
+    -Dspring.config.location=classpath:/application.yml \
     -Dspring.profiles.active=$IDLE_PROFILE \
-    $BUILD_JAR > $REPOSITORY/nohup.out 2>&1 &
+    -Dserver.port=$IDLE_PORT \
+    $BUILD_JAR >> $LOG_FILE 2>&1 &
 
 echo "> 배포 완료. PID 확인..."
 # 잠시 대기 후 확인
@@ -42,6 +48,9 @@ NEW_PID=$(lsof -ti tcp:${IDLE_PORT})
 if [ -z ${NEW_PID} ]
 then
     echo "> ❌ 배포 실패: 프로세스가 실행되지 않았습니다."
+    echo "=========== 실행 로그 ($LOG_FILE) ==========="
+    cat $LOG_FILE
+    echo "==========================================="
     exit 1
 else
     echo "> ✅ 배포 성공 (PID: $NEW_PID)"
