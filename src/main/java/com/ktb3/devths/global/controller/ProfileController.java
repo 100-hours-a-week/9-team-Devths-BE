@@ -13,17 +13,18 @@ import lombok.RequiredArgsConstructor;
 @RestController
 public class ProfileController {
 
-private final Environment env;
+    private final Environment env;
 
-@GetMapping("/profile")
-public String profile() {
-List<String> profiles = Arrays.asList(env.getActiveProfiles());
-List<String> realProfiles = Arrays.asList("set1", "set2");
-String defaultProfile = profiles.isEmpty() ? "default" : profiles.get(0);
+    @GetMapping("/profile")
+    public String profile() {
 
-return profiles.stream()
-.filter(realProfiles::contains)
-.findAny()
-.orElse(defaultProfile);
-}
+        List<String> profiles = Arrays.asList(env.getActiveProfiles());
+        List<String> realProfiles = Arrays.asList("set1", "set2");
+        String defaultProfile = profiles.isEmpty() ? "default" : profiles.get(0);
+
+        return profiles.stream()
+                .filter(realProfiles::contains)
+                .findAny()
+                .orElse(defaultProfile);
+    }
 }
