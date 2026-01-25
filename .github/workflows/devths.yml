@@ -242,14 +242,14 @@ jobs:
 
           # 2. 브랜치 정보
           echo "branch=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-          
+
       - name: Discord 빌드 알림
         uses: sarisia/actions-status-discord@v1
         with:
-          status: ${{ (needs.lint.result == 'success' && needs.build_and_analyze.result == 'success' && needs.deploy.result == 'success') && 'success' || 'failure' }}
+          status: ${{ (needs.lint.result == 'success' && needs.build_and_analyze.result == 'success' && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped')) && 'success' || 'failure' }}
           # 타겟 브랜치에 따른 웹훅 분기
           webhook: ${{ github.ref_name == 'main' && secrets.DISCORD_WEBHOOK_PROD_URL || secrets.DISCORD_WEBHOOK_NON_PROD_URL }}
-          title: "${{ steps.prep.outputs.branch }} 결과 [${{ (needs.lint.result == 'success' && needs.build_and_analyze.result == 'success' && needs.deploy.result == 'success') && '✅성공' || '❌실패' }}]"
+          title: "배포(CI) 결과 [${{ (needs.lint.result == 'success' && needs.build_and_analyze.result == 'success' && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped')) && '✅성공' || '❌실패' }}]"
           description: |
             **커밋 메시지**: ${{ steps.prep.outputs.title }}
             **브랜치**: `${{ steps.prep.outputs.branch }}`
@@ -264,7 +264,7 @@ jobs:
 
             **🔗 링크**: [커밋 확인하기](${{ github.event.repository.html_url }}/commit/${{ github.sha }})
 
-          color: "${{ (needs.lint.result == 'success' && needs.build_and_analyze.result == 'success' && needs.deploy.result == 'success') && 65280 || 16711680 }}"
+          color: "${{ (needs.lint.result == 'success' && needs.build_and_analyze.result == 'success' && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped')) && 65280 || 16711680 }}"
           username: GitHub Merge Bot
           avatar_url: https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
 
@@ -306,16 +306,16 @@ jobs:
           
           if [ "$INSTANCE_ID" != "None" ] && [ -n "$INSTANCE_ID" ]; then
             EVENTS=$(aws deploy get-deployment-instance --deployment-id $DEPLOYMENT_ID --instance-id $INSTANCE_ID --query "instanceSummary.lifecycleEvents")
-            
+          
             # 각 단계별 상태 추출 (Succeeded, Failed, Skipped, Pending, Unknown)
             STATUS_DOWNLOAD=$(echo $EVENTS | jq -r '.[] | select(.lifecycleEventName=="DownloadBundle") | .status')
             STATUS_APP_START=$(echo $EVENTS | jq -r '.[] | select(.lifecycleEventName=="ApplicationStart") | .status')
             STATUS_VALIDATE=$(echo $EVENTS | jq -r '.[] | select(.lifecycleEventName=="ValidateService") | .status')
-            
+          
             echo "status_download=$STATUS_DOWNLOAD" >> $GITHUB_OUTPUT
             echo "status_app_start=$STATUS_APP_START" >> $GITHUB_OUTPUT
             echo "status_validate=$STATUS_VALIDATE" >> $GITHUB_OUTPUT
-            
+          
             # 실패 시 상세 원인 추출
             if [ "$STATUS" != "Succeeded" ]; then
                ERROR_STEP=$(echo $EVENTS | jq -r '.[] | select(.status=="Failed") | .lifecycleEventName')
@@ -346,7 +346,7 @@ jobs:
             - 검증/전환/종료: ${{ steps.cd-check.outputs.status_validate == 'Succeeded' && '✅Pass' || (steps.cd-check.outputs.status_validate == 'Failed' && '❌Fail' || '⏭️Skip/Wait') }}
 
             ${{ steps.cd-check.outputs.status != 'Succeeded' && format('**⚠️ 실패 단계**: {0}', steps.cd-check.outputs.error_step) || '' }}
-            
+
           color: "${{ steps.cd-check.outputs.status == 'Succeeded' && 65280 || 16711680 }}"
           username: AWS CodeDeploy Bot
           avatar_url: https://d1.awsstatic.com/icons/console/CodeDeploy_Icon.4ab321a5b8b9b2b2b2b2b2b2b2b2b2b2b2b2b2b.png
