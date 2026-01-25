@@ -189,7 +189,7 @@ jobs:
             echo "⚠️ scripts 디렉토리가 없습니다."
           fi
 
-          # 5. ZIP 압축
+          # 6. ZIP 압축
           cd deploy-package
           zip -r "../$VERSION_NAME.zip" ./*
           cd ..

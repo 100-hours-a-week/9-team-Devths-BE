@@ -32,26 +32,180 @@ REPOSITORY=/home/ubuntu/be
 mkdir -p $REPOSITORY/logs
 LOG_FILE=$REPOSITORY/logs/application.log
 
+# 3. deployment.env에서 브랜치 정보 읽기
+if [ -f $REPOSITORY/deployment.env ]; then
+	source $REPOSITORY/deployment.env
+	echo "> deployment.env 파일 로드 완료"
+else
+	echo "> ⚠️ deployment.env 파일이 없습니다. 기본값(develop) 사용"
+	DEPLOY_BRANCH="develop"
+fi
+
+# 4. 브랜치별 프로필 및 파라미터 스토어 경로 매핑
+case $DEPLOY_BRANCH in
+	develop)
+		SPRING_PROFILE="dev"
+		PARAM_STORE_PATH="/Dev/BE"
+		;;
+	release)
+		SPRING_PROFILE="stg"
+		PARAM_STORE_PATH="/Stg/BE"
+		;;
+	main)
+		SPRING_PROFILE="prod"
+		PARAM_STORE_PATH="/Main/BE"
+		;;
+	*)
+		echo "> ⚠️ 알 수 없는 브랜치: $DEPLOY_BRANCH. 기본값(dev) 사용"
+		SPRING_PROFILE="dev"
+		PARAM_STORE_PATH="/Dev/BE"
+		;;
+esac
+
+echo "> DEPLOY_BRANCH: $DEPLOY_BRANCH"
+echo "> SPRING_PROFILE: $SPRING_PROFILE"
+echo "> PARAM_STORE_PATH: $PARAM_STORE_PATH"
+
+# 5. AWS Parameter Store에서 환경 변수 가져오기
+echo "> AWS Parameter Store에서 환경 변수 로드 중..."
+PARAMS=$(aws ssm get-parameters-by-path \
+	--path "$PARAM_STORE_PATH" \
+	--recursive \
+	--with-decryption \
+	--query 'Parameters[*].[Name,Value]' \
+	--output text 2>/dev/null)
+
+if [ $? -eq 0 ] && [ -n "$PARAMS" ]; then
+	echo "> ✅ 파라미터 스토어에서 환경 변수를 성공적으로 로드했습니다."
+
+	# 환경 변수로 설정 (파일로 저장)
+	ENV_FILE=$REPOSITORY/.env.ssm
+	> $ENV_FILE  # 파일 초기화
+
+	while IFS=$'\t' read -r NAME VALUE; do
+		# 파라미터 이름에서 경로 제거 후 환경 변수 이름으로 변환
+		# 예: /Dev/BE/DATABASE_URL -> DATABASE_URL
+		VAR_NAME=$(echo $NAME | sed "s|$PARAM_STORE_PATH/||" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
+		echo "export $VAR_NAME='$VALUE'" >> $ENV_FILE
+		echo "  - $VAR_NAME 설정 완료"
+	done <<< "$PARAMS"
+
+	source $ENV_FILE
+	echo "> ✅ 환경 변수 설정 완료"
+else
+	echo "> ⚠️ 파라미터 스토어에서 환경 변수를 가져올 수 없습니다. 계속 진행합니다."
+fi
+
 BUILD_JAR=$(ls $REPOSITORY/application.jar)
+if [ -z "$BUILD_JAR" ]; then
+    echo "❌ [Artifact Error] 실행 가능한 JAR 파일을 찾을 수 없습니다."
+    exit 1
+fi
+
+# 배포 그룹에 따른 SSM Path 파싱 (CodeDeploy 환경변수: DEPLOYMENT_GROUP_NAME 사용)
+SSM_PATH="/Dev/BE/" # 기본값 (Dev)
+
+if [[ "$DEPLOYMENT_GROUP_NAME" == *"Prod"* ]]; then
+    SSM_PATH="/Prod/BE/"
+fi
+
+echo "> AWS SSM Parameter Store에서 환경변수 주입 (Path: $SSM_PATH)"
+# jq 존재 여부 확인 (AMI에 미리 설치되어 있어야 함)
+if ! command -v jq &> /dev/null
+then
+    echo "❌ [Dependency Error] jq가 설치되어 있지 않습니다. 서버 셋팅을 확인해주세요."
+    exit 1
+fi
+
+# 경로 하위의 모든 파라미터를 가져와서 export
+PARAMETERS=$(aws ssm get-parameters-by-path --path "$SSM_PATH" --recursive --with-decryption --region ap-northeast-2 --output json)
+
+if [ -z "$PARAMETERS" ] || [ "$PARAMETERS" == "null" ]; then
+    echo "❌ [Configuration Error] SSM 파라미터를 가져오지 못했습니다. IAM 권한이나 경로($SSM_PATH)를 확인해주세요."
+    exit 1
+else
+    # jq로 "KEY=VALUE" 형식으로 변환 후, while loop로 읽어서 export 수행
+    # < <(...) 프로세스 치환을 사용하여 서브쉘 문제 방지
+    while IFS='=' read -r key value; do
+        if [ -n "$key" ]; then
+            export "$key"="$value"
+            echo "> Exported: $key"
+        fi
+    done < <(echo "$PARAMETERS" | jq -r --arg path "$SSM_PATH" '.Parameters[] | ((.Name | sub($path; "") | gsub("[.-]"; "_") | ascii_upcase) + "=" + .Value)')
+fi
+
+# 포트 확인
+echo "> $IDLE_PORT 포트가 비어있는지 2차 확인"
+if lsof -Pi :$IDLE_PORT -sTCP:LISTEN -t >/dev/null ; then
+    echo "⚠️ [Port Warning] 포트 $IDLE_PORT 가 아직 사용 중입니다. 강제 종료를 시도합니다."
+    kill -15 $(lsof -Pi :$IDLE_PORT -sTCP:LISTEN -t) || true
+    sleep 3
+fi
 
 echo "> 새 애플리케이션 배포"
 nohup java -jar \
     -Dspring.config.location=classpath:/application.yml \
-    -Dspring.profiles.active=$IDLE_PROFILE \
+    -Dspring.profiles.active=$IDLE_PROFILE,$SPRING_PROFILE \
     -Dserver.port=$IDLE_PORT \
     $BUILD_JAR >> $LOG_FILE 2>&1 &
 
-echo "> 배포 완료. PID 확인..."
-# 잠시 대기 후 확인
-sleep 3
-NEW_PID=$(lsof -ti tcp:${IDLE_PORT})
-if [ -z ${NEW_PID} ]
-then
-    echo "> ❌ 배포 실패: 프로세스가 실행되지 않았습니다."
-    echo "=========== 실행 로그 ($LOG_FILE) ==========="
-    cat $LOG_FILE
+echo "> 배포 완료. 구동 대기 중..."
+
+# 3. 구동 대기 (최대 60초)
+SUCCESS=false
+for i in {1..20}
+do
+    sleep 3
+    echo "> 구동 확인 ($i/20)..."
+    
+    # 1) lsof로 포트가 열렸는지 1차 확인 (빠른 실패 감지용)
+    if ! lsof -Pi :$IDLE_PORT -sTCP:LISTEN -t >/dev/null; then
+         echo "   ... 아직 포트가 열리지 않음"
+         continue
+    fi
+
+    # 2) curl로 실제 응답 확인 (Health Check)
+    # /profile 엔드포인트를 호출하여 200 OK가 나오는지 확인
+    # 실패 시(Connection Refused 등)에는 000 반환됨
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$IDLE_PORT/profile || echo "000")
+    
+    if [ "$HTTP_CODE" == "200" ]; then
+        # 성공 시 PID 추출
+        CURRENT_PID=$(lsof -ti tcp:${IDLE_PORT})
+        echo "> ✅ Health Check 성공 (HTTP 200). 구동 완료 (PID: $CURRENT_PID)."
+        SUCCESS=true
+        break
+    else
+        echo "   ... 포트는 열렸으나 아직 응답 없음 (HTTP $HTTP_CODE)"
+    fi
+done
+
+if [ "$SUCCESS" = false ]; then
+    echo "❌ [Boot Error] 지정된 시간(60초) 내에 애플리케이션이 포트($IDLE_PORT)를 점유하지 못했습니다."
+    
+    # 로그 분석
+    echo "=========== 실패 원인 분석 (로그 스캔) ==========="
+    if grep -q "PortInUseException" $LOG_FILE || grep -q "BindException" $LOG_FILE; then
+        echo "❌ [Reason: Port] 포트($IDLE_PORT)가 이미 사용 중입니다."
+    
+    elif grep -q "AccessDenied" $LOG_FILE || grep -q "Connection refused" $LOG_FILE; then
+        echo "❌ [Reason: Database/Network] DB 연결 실패 또는 네트워크 문제입니다."
+        
+    elif grep -q "ClassNotFoundException" $LOG_FILE || grep -q "NoClassDefFoundError" $LOG_FILE; then
+        echo "❌ [Reason: Artifact] 빌드된 JAR 파일에 문제가 있습니다 (클래스 누락)."
+        
+    elif grep -q "Error creating bean" $LOG_FILE; then
+        echo "❌ [Reason: Config/Bean] 스프링 빈 생성 실패 (설정 오류 가능성)."
+        
+    else
+        echo "❌ [Reason: Unknown] 로그 파일($LOG_FILE)을 직접 확인해주세요."
+    fi
+    echo "================================================="
+    
+    echo "=========== 실행 로그 (마지막 100줄) ==========="
+    tail -n 100 $LOG_FILE
     echo "==========================================="
     exit 1
 else
-    echo "> ✅ 배포 성공 (PID: $NEW_PID)"
+    echo "> ✅ 배포 성공 (PID: $CURRENT_PID)"
 fi
