@@ -189,7 +189,11 @@ jobs:
             echo "⚠️ scripts 디렉토리가 없습니다."
           fi
 
-          # 5. ZIP 압축
+          # 5. deployment.env 파일 생성 (브랜치 정보)
+          echo "DEPLOY_BRANCH=${{ github.ref_name }}" > deploy-package/deployment.env
+          echo "📝 배포 환경 정보: ${{ github.ref_name }}"
+
+          # 6. ZIP 압축
           cd deploy-package
           zip -r "../$VERSION_NAME.zip" ./*
           cd ..
