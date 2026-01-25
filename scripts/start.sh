@@ -143,11 +143,18 @@ if lsof -Pi :$IDLE_PORT -sTCP:LISTEN -t >/dev/null ; then
 fi
 
 echo "> 새 애플리케이션 배포"
+
+# [수정] CodeDeploy 프로세스 정리 대상에서 제외
+export FOR_CODELDP_IGN=true
+
 nohup java -jar \
     -Dspring.config.location=classpath:/application.yml \
     -Dspring.profiles.active=$IDLE_PROFILE,$SPRING_PROFILE \
     -Dserver.port=$IDLE_PORT \
     $BUILD_JAR >> $LOG_FILE 2>&1 &
+
+# [수정] 현재 세션에서 프로세스 분리
+disown
 
 echo "> 배포 완료. 구동 대기 중..."
 
