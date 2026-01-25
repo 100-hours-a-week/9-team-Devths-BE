@@ -1,0 +1,71 @@
+name: Discord Bug Report Notification
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  notify-discord:
+    runs-on: ubuntu-latest
+    if: contains(github.event.issue.labels.*.name, 'bug')
+
+    steps:
+      - name: 데이터 준비
+        id: prep
+        env:
+          USER_MAP: ${{ secrets.USER_MAP_JSON }}
+        run: |
+          # 1. 작성자 매핑
+          LOGIN_ID="${{ github.event.issue.user.login }}"
+          AUTHOR_TAG=$(echo "$USER_MAP" | jq -r --arg id "$LOGIN_ID" '.[$id] // $id')
+          echo "author=$AUTHOR_TAG" >> $GITHUB_OUTPUT
+
+          # 2. 응답자 매핑 (assignees)
+          ASSIGNEES_JSON='${{ toJson(github.event.issue.assignees) }}'
+          ASSIGNEE_TAGS=$(echo "$ASSIGNEES_JSON" | jq -r --argjson map "$USER_MAP" '
+            [.[].login | ($map[.] // .)] | join(", ")
+          ')
+          echo "assignees=${ASSIGNEE_TAGS:-없음}" >> $GITHUB_OUTPUT
+
+          # 3. 이슈 본문 추출 (최대 500자, 마크다운 제거)
+          ISSUE_RAW_BODY=$(cat << 'EOF'
+          ${{ github.event.issue.body }}
+          EOF
+          )
+
+          # 마크다운 문법 제거 (헤더, 이모지 레이블 등)
+          DESC=$(echo "$ISSUE_RAW_BODY" | \
+            sed 's/^#\+[[:space:]]*//g' | \
+            sed 's/^[[:space:]]*-[[:space:]]*//g' | \
+            sed 's/\*\*//g' | \
+            sed 's/^🐛[[:space:]]*버그 설명//g' | \
+            sed 's/^🎯[[:space:]]*재현 방법//g' | \
+            sed 's/^🖥[[:space:]]*환경 정보//g' | \
+            sed 's/^📸[[:space:]]*스크린샷.*//g' | \
+            sed '/^[[:space:]]*$/d' | \
+            tr '\n' ' ' | \
+            xargs | \
+            head -c 500)
+          echo "description=${DESC:-내용 없음}" >> $GITHUB_OUTPUT
+
+      - name: Send Discord Notification
+        uses: sarisia/actions-status-discord@v1
+        with:
+          status: failure
+          webhook: ${{ secrets.DISCORD_WEBHOOK_BUG_URL }}
+          title: "🐞 새로운 버그 리포트"
+          description: |
+            ${{ secrets.DISCORD_ROLE_BE }}
+
+            **제목**: ${{ github.event.issue.title }}
+            **작성자**: ${{ steps.prep.outputs.author }}
+            **담당자**: ${{ steps.prep.outputs.assignees }}
+            **이슈 번호**: #${{ github.event.issue.number }}
+
+            **📝 내용**:
+            ${{ steps.prep.outputs.description }}...
+
+            **🔗 링크**: [이슈 확인하기](${{ github.event.issue.html_url }})
+          color: 16711680
+          username: AWS Bug Bot
+          avatar_url: https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
