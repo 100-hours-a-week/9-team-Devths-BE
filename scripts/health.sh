@@ -5,19 +5,20 @@ ABSDIR=$(dirname $ABSPATH)
 source ${ABSDIR}/profile.sh
 
 IDLE_PORT=$(find_idle_port)
+HEALTH_URL="http://localhost:${IDLE_PORT}/actuator/health"
 
 echo "> Health Check Start!"
 echo "> IDLE_PORT: $IDLE_PORT"
-echo "> curl -s http://localhost:$IDLE_PORT/profile "
+echo "> curl -s $HEALTH_URL"
 sleep 10
 
 for RETRY_COUNT in {1..10}
 do
-  RESPONSE=$(curl -s http://localhost:${IDLE_PORT}/profile)
-  UP_COUNT=$(echo ${RESPONSE} | grep 'set' | wc -l)
+  RESPONSE=$(curl -s "$HEALTH_URL" || true)
+  UP_COUNT=$(echo "${RESPONSE}" | grep -E '"status"[[:space:]]*:[[:space:]]*"UP"' | wc -l)
 
   if [ ${UP_COUNT} -ge 1 ]
-  then # $up_count >= 1 ("set" 문자열이 포함되어 있다면 성공)
+  then # $up_count >= 1 ("status":"UP" 이 포함되어 있다면 성공)
       echo "> Health check 성공"
       break
   else

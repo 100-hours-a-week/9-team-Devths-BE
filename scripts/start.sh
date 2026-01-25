@@ -165,18 +165,22 @@ do
     fi
 
     # 2) curl로 실제 응답 확인 (Health Check)
-    # /profile 엔드포인트를 호출하여 200 OK가 나오는지 확인
+    # Actuator Health 엔드포인트(/actuator/health)가 UP인지 확인
     # 실패 시(Connection Refused 등)에는 000 반환됨
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$IDLE_PORT/profile || echo "000")
-    
-    if [ "$HTTP_CODE" == "200" ]; then
+    HEALTH_URL="http://localhost:$IDLE_PORT/actuator/health"
+    TMP_BODY=$(mktemp)
+    HTTP_CODE=$(curl -s -o "$TMP_BODY" -w "%{http_code}" "$HEALTH_URL" || echo "000")
+    RESPONSE=$(cat "$TMP_BODY" 2>/dev/null || echo "")
+    rm -f "$TMP_BODY"
+
+    if [ "$HTTP_CODE" == "200" ] && echo "$RESPONSE" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"'; then
         # 성공 시 PID 추출
         CURRENT_PID=$(lsof -ti tcp:${IDLE_PORT})
         echo "> ✅ Health Check 성공 (HTTP 200). 구동 완료 (PID: $CURRENT_PID)."
         SUCCESS=true
         break
     else
-        echo "   ... 포트는 열렸으나 아직 응답 없음 (HTTP $HTTP_CODE)"
+        echo "   ... 포트는 열렸으나 아직 UP 응답 없음 (HTTP $HTTP_CODE)"
     fi
 done
 
