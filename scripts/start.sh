@@ -32,19 +32,19 @@ REPOSITORY=/home/ubuntu/be
 mkdir -p $REPOSITORY/logs
 LOG_FILE=$REPOSITORY/logs/application.log
 
-
-
 BUILD_JAR=$(ls $REPOSITORY/application.jar)
 if [ -z "$BUILD_JAR" ]; then
     echo "❌ [Artifact Error] 실행 가능한 JAR 파일을 찾을 수 없습니다."
     exit 1
 fi
 
-# 배포 그룹에 따른 SSM Path 파싱 (CodeDeploy 환경변수: DEPLOYMENT_GROUP_NAME 사용)
-SSM_PATH="/Dev/BE/" # 기본값 (Dev)
+# 배포 그룹에 따른 SSM Path 및 Spring Profile 파싱 (CodeDeploy 환경변수: DEPLOYMENT_GROUP_NAME 사용)
+SSM_PATH="/Dev/BE/"           # 기본값 (Dev)
+SPRING_PROFILE="dev"
 
 if [[ "$DEPLOYMENT_GROUP_NAME" == *"Prod"* ]]; then
-    SSM_PATH="/Prod/BE/"
+    SSM_PATH="/Main/BE/"      # Prod는 /Main/BE/ 사용
+    SPRING_PROFILE="prod"
 fi
 
 echo "> AWS SSM Parameter Store에서 환경변수 주입 (Path: $SSM_PATH)"
