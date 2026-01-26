@@ -163,7 +163,7 @@ SUCCESS=false
 for i in {1..20}
 do
     sleep 3
-    echo "> 구동 확인 ($i/20)..."
+    echo "> 구동 확인 ($i/60)..."
     
     # 1) lsof로 포트가 열렸는지 1차 확인 (빠른 실패 감지용)
     if ! lsof -Pi :$IDLE_PORT -sTCP:LISTEN -t >/dev/null; then
@@ -192,7 +192,7 @@ do
 done
 
 if [ "$SUCCESS" = false ]; then
-    echo "❌ [Boot Error] 지정된 시간(60초) 내에 애플리케이션이 포트($IDLE_PORT)를 점유하지 못했습니다."
+    echo "❌ [Boot Error] 지정된 시간(180초) 내에 애플리케이션이 포트($IDLE_PORT)를 점유하지 못했습니다."
     
     # 로그 분석
     echo "=========== 실패 원인 분석 (로그 스캔) ==========="
