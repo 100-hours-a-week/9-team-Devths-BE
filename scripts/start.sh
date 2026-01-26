@@ -117,8 +117,8 @@ then
     exit 1
 fi
 
-# 경로 하위의 모든 파라미터를 가져와서 export
-PARAMETERS=$(aws ssm get-parameters-by-path --path "$SSM_PATH" --recursive --with-decryption --region ap-northeast-2 --output json)
+# 경로 하위의 모든 파라미터를 가져와서 export (페이지네이션 이슈 방지를 위해 max-items 설정)
+PARAMETERS=$(aws ssm get-parameters-by-path --path "$SSM_PATH" --recursive --with-decryption --region ap-northeast-2 --max-items 100 --output json)
 
 if [ -z "$PARAMETERS" ] || [ "$PARAMETERS" == "null" ]; then
     echo "❌ [Configuration Error] SSM 파라미터를 가져오지 못했습니다. IAM 권한이나 경로($SSM_PATH)를 확인해주세요."
@@ -169,7 +169,7 @@ do
     if ! lsof -Pi :$IDLE_PORT -sTCP:LISTEN -t >/dev/null; then
          echo "   ... 아직 포트가 열리지 않음"
          continue
-    fi
+    fi    
 
     # 2) curl로 실제 응답 확인 (Health Check)
     # Actuator Health 엔드포인트(/actuator/health)가 UP인지 확인
