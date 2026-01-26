@@ -9,7 +9,9 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.filter.CorsFilter;
 
+import com.ktb3.devths.global.security.filter.CorsDebugFilter;
 import com.ktb3.devths.global.security.handler.CustomAccessDeniedHandler;
 import com.ktb3.devths.global.security.handler.JwtAuthenticationEntryPoint;
 import com.ktb3.devths.global.security.jwt.JwtAuthenticationFilter;
@@ -20,6 +22,7 @@ import lombok.RequiredArgsConstructor;
 @EnableWebSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
+	private final CorsDebugFilter corsDebugFilter;
 	private final JwtAuthenticationFilter jwtAuthenticationFilter;
 	private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 	private final CustomAccessDeniedHandler customAccessDeniedHandler;
@@ -41,6 +44,7 @@ public class SecurityConfig {
 				.authenticationEntryPoint(jwtAuthenticationEntryPoint)
 				.accessDeniedHandler(customAccessDeniedHandler)
 			)
+			.addFilterBefore(corsDebugFilter, CorsFilter.class)
 			.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
 		return http.build();
