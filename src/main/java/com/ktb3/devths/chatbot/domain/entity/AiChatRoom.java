@@ -64,4 +64,8 @@ public class AiChatRoom {
 		this.isDeleted = true;
 		this.deletedAt = LocalDateTime.now();
 	}
+
+	public void updateTitle(String title) {
+		this.title = title;
+	}
 }

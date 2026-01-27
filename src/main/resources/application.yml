@@ -73,3 +73,15 @@ management:
   endpoint:
     health:
       show-details: never
+
+fastapi:
+  base-url: ${FASTAPI_BASE_URL}
+  timeout: 30000
+  poll-interval: 2000
+  max-poll-attempts: 150
+
+async:
+  core-pool-size: 5
+  max-pool-size: 10
+  queue-capacity: 100
+  thread-name-prefix: "async-analysis-"
