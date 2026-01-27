@@ -48,7 +48,7 @@ public class DocumentAnalysisService {
 		}
 
 		validateDocumentInfo(request.resume());
-		validateDocumentInfo(request.jobPosting());
+		validateDocumentInfo(request.jobPost());
 
 		List<AsyncTask> existingTasks = asyncTaskRepository.findByReferenceIdAndTaskTypeAndStatusIn(
 			roomId,
