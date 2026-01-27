@@ -5,7 +5,7 @@ import jakarta.servlet.http.Cookie;
 public class CookieUtil {
 	private static final String REFRESH_TOKEN_COOKIE_NAME = "refreshToken";
 	private static final String COOKIE_PATH = "/api/auth";
-	private static final String COOKIE_DOMAIN = ".devths.com";
+	private static final String COOKIE_DOMAIN = "devths.com";
 	private static final int REFRESH_TOKEN_MAX_AGE = 14 * 24 * 60 * 60; // 14일 (초 단위)
 
 	/**
