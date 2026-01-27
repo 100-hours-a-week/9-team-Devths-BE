@@ -12,7 +12,7 @@ public record DocumentAnalysisRequest(
 	DocumentInfo resume,
 
 	@NotNull(message = "채용공고 정보는 필수입니다")
-	DocumentInfo jobPosting
+	DocumentInfo jobPost
 ) {
 	public record DocumentInfo(
 		Long fileId,

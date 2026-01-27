@@ -79,7 +79,7 @@ public class AsyncAnalysisProcessor {
 		DocumentAnalysisRequest request) {
 
 		FastApiAnalysisRequest.FastApiDocumentInfo resumeInfo = buildDocumentInfo(request.resume(), userId);
-		FastApiAnalysisRequest.FastApiDocumentInfo jobPostingInfo = buildDocumentInfo(request.jobPosting(),
+		FastApiAnalysisRequest.FastApiDocumentInfo jobPostingInfo = buildDocumentInfo(request.jobPost(),
 			userId);
 
 		return new FastApiAnalysisRequest(
