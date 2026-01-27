@@ -13,6 +13,7 @@ import com.ktb3.devths.analysis.dto.response.FastApiTaskStatusResponse;
 import com.ktb3.devths.global.config.properties.FastApiProperties;
 import com.ktb3.devths.global.exception.CustomException;
 import com.ktb3.devths.global.response.ErrorCode;
+import com.ktb3.devths.global.util.LogSanitizer;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,7 +41,7 @@ public class FastApiClient {
 				throw new CustomException(ErrorCode.FASTAPI_CONNECTION_FAILED);
 			}
 
-			log.info("FastAPI 분석 요청 성공: taskId={}", response.taskId());
+			log.info("FastAPI 분석 요청 성공: taskId={}", LogSanitizer.sanitize(response.taskId()));
 			return response;
 
 		} catch (RestClientException e) {
@@ -65,7 +66,7 @@ public class FastApiClient {
 			return response;
 
 		} catch (RestClientException e) {
-			log.error("FastAPI 작업 상태 조회 실패: taskId={}", taskId, e);
+			log.error("FastAPI 작업 상태 조회 실패: taskId={}", LogSanitizer.sanitize(taskId), e);
 			throw new CustomException(ErrorCode.FASTAPI_CONNECTION_FAILED);
 		}
 	}

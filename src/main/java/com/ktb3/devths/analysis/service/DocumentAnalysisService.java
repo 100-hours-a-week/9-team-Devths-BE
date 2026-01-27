@@ -28,6 +28,7 @@ import com.ktb3.devths.global.exception.CustomException;
 import com.ktb3.devths.global.response.ErrorCode;
 import com.ktb3.devths.global.storage.domain.entity.S3Attachment;
 import com.ktb3.devths.global.storage.repository.S3AttachmentRepository;
+import com.ktb3.devths.global.util.LogSanitizer;
 import com.ktb3.devths.user.domain.entity.User;
 import com.ktb3.devths.user.repository.UserRepository;
 
@@ -113,7 +114,8 @@ public class DocumentAnalysisService {
 			if ("completed".equalsIgnoreCase(statusResponse.status())) {
 				handleAnalysisSuccess(taskId, roomId, statusResponse);
 			} else {
-				handleAnalysisFailure(taskId, "FastAPI에서 분석이 완료되지 않았습니다: " + statusResponse.status());
+				handleAnalysisFailure(taskId, "FastAPI에서 분석이 완료되지 않았습니다: "
+					+ LogSanitizer.sanitize(statusResponse.status()));
 			}
 
 		} catch (CustomException e) {
@@ -176,7 +178,7 @@ public class DocumentAnalysisService {
 				FastApiTaskStatusResponse response = fastApiClient.pollTaskStatus(fastApiTaskId);
 
 				if ("completed".equalsIgnoreCase(response.status())) {
-					log.info("FastAPI 작업 완료: taskId={}", fastApiTaskId);
+					log.info("FastAPI 작업 완료: taskId={}", LogSanitizer.sanitize(fastApiTaskId));
 					return response;
 				} else if ("failed".equalsIgnoreCase(response.status())) {
 					throw new CustomException(ErrorCode.ANALYSIS_FAILED);
@@ -242,7 +244,7 @@ public class DocumentAnalysisService {
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	protected void handleAnalysisFailure(Long taskId, String reason) {
 		asyncTaskService.markAsFailed(taskId, reason);
-		log.error("분석 실패 처리 완료: taskId={}, reason={}", taskId, reason);
+		log.error("분석 실패 처리 완료: taskId={}, reason={}", taskId, LogSanitizer.sanitize(reason));
 	}
 
 	private String extractSummary(Map<String, Object> result) {
