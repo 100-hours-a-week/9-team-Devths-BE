@@ -35,6 +35,9 @@ public class FastApiClient {
 		try {
 			String url = fastApiProperties.getBaseUrl() + "/ai/text/extract";
 
+			log.info("FastAPI 분석 요청 전송: taskId={}, roomId={}, userId={}",
+				request.taskId(), request.roomId(), request.userId());
+
 			FastApiAnalysisResponse response = restClient.post()
 				.uri(url)
 				.contentType(MediaType.APPLICATION_JSON)
@@ -46,7 +49,8 @@ public class FastApiClient {
 				throw new CustomException(ErrorCode.FASTAPI_CONNECTION_FAILED);
 			}
 
-			log.info("FastAPI 분석 요청 성공: taskId={}", response.taskId());
+			log.info("FastAPI 분석 요청 성공 - 요청 taskId={}, 응답 taskId={}",
+				request.taskId(), response.taskId());
 			return response;
 
 		} catch (RestClientException e) {
