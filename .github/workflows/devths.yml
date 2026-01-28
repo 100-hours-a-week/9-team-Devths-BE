@@ -268,7 +268,7 @@ jobs:
             - Deployment: ${{ needs.deploy.result == 'success' && '✅' || (needs.deploy.result == 'skipped' && '⏭️' || '❌') }}
 
             ${{ needs.build_and_analyze.result != 'success' && '⚠️ **정적 분석 실패로 인해 빌드가 중단되었습니다.**' || '' }}
-            **📂 S3 Key**: `${{needs.deploy.outputs.s3_key}}
+            **📂 S3 Key**: `${{needs.deploy.outputs.s3_key}}`
             **🔗 링크**: [커밋 확인하기](${{ github.event.repository.html_url }}/commit/${{ github.sha }})
 
           color: "${{ (needs.lint.result == 'success' && needs.build_and_analyze.result == 'success' && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped')) && 65280 || 16711680 }}"
