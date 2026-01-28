@@ -62,4 +62,11 @@ public class AiChatInterview {
 	@LastModifiedDate
 	private LocalDateTime updatedAt;
 
+	public void incrementQuestionCount() {
+		this.currentQuestionCount++;
+	}
+
+	public void complete() {
+		this.status = InterviewStatus.COMPLETED;
+	}
 }
