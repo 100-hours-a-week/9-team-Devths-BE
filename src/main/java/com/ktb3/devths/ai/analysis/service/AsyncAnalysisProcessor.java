@@ -133,11 +133,27 @@ public class AsyncAnalysisProcessor {
 					throw new CustomException(ErrorCode.ANALYSIS_FAILED);
 				}
 
+				log.debug("FastAPI 작업 진행 중: taskId={}, status={}, attempt={}/{}",
+					taskId, response.status(), attempt + 1, maxAttempts);
 				Thread.sleep(pollInterval);
 
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 				throw new CustomException(ErrorCode.ANALYSIS_FAILED);
+			} catch (CustomException e) {
+				if (attempt < maxAttempts - 1) {
+					log.warn("FastAPI 작업 조회 실패 (재시도 예정): taskId={}, attempt={}/{}",
+						taskId, attempt + 1, maxAttempts);
+					try {
+						Thread.sleep(pollInterval);
+					} catch (InterruptedException ie) {
+						Thread.currentThread().interrupt();
+						throw new CustomException(ErrorCode.ANALYSIS_FAILED);
+					}
+				} else {
+					log.error("FastAPI 작업 조회 최종 실패: taskId={}", taskId);
+					throw e;
+				}
 			}
 		}
 
