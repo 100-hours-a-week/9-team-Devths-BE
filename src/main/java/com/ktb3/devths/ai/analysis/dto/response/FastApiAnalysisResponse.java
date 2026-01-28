@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 public record FastApiAnalysisResponse(
 	@JsonProperty("task_id")
-	String taskId,
+	Long taskId,
 
 	String status
 ) {

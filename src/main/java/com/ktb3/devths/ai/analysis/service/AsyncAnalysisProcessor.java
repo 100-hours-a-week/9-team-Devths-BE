@@ -51,13 +51,11 @@ public class AsyncAnalysisProcessor {
 
 			asyncTaskService.updateStatus(taskId, TaskStatus.PROCESSING);
 
-			FastApiAnalysisRequest fastApiRequest = buildFastApiRequest(userId, roomId, request);
+			FastApiAnalysisRequest fastApiRequest = buildFastApiRequest(taskId, userId, roomId, request);
 
 			FastApiAnalysisResponse analysisResponse = fastApiClient.requestAnalysis(fastApiRequest);
 
-			asyncTaskService.setExternalTaskId(taskId, analysisResponse.taskId());
-
-			FastApiTaskStatusResponse statusResponse = pollFastApiTask(analysisResponse.taskId());
+			FastApiTaskStatusResponse statusResponse = pollFastApiTask(taskId);
 
 			if ("completed".equalsIgnoreCase(statusResponse.status())) {
 				handleAnalysisSuccess(taskId, roomId, statusResponse);
@@ -75,7 +73,7 @@ public class AsyncAnalysisProcessor {
 		}
 	}
 
-	private FastApiAnalysisRequest buildFastApiRequest(Long userId, Long roomId,
+	private FastApiAnalysisRequest buildFastApiRequest(Long taskId, Long userId, Long roomId,
 		DocumentAnalysisRequest request) {
 
 		FastApiAnalysisRequest.FastApiDocumentInfo resumeInfo = buildDocumentInfo(request.resume(), userId);
@@ -83,6 +81,7 @@ public class AsyncAnalysisProcessor {
 			userId);
 
 		return new FastApiAnalysisRequest(
+			taskId,
 			request.model().name().toLowerCase(),
 			roomId,
 			userId,
@@ -118,16 +117,16 @@ public class AsyncAnalysisProcessor {
 		);
 	}
 
-	private FastApiTaskStatusResponse pollFastApiTask(String fastApiTaskId) {
+	private FastApiTaskStatusResponse pollFastApiTask(Long taskId) {
 		int maxAttempts = fastApiProperties.getMaxPollAttempts();
 		int pollInterval = fastApiProperties.getPollInterval();
 
 		for (int attempt = 0; attempt < maxAttempts; attempt++) {
 			try {
-				FastApiTaskStatusResponse response = fastApiClient.pollTaskStatus(fastApiTaskId);
+				FastApiTaskStatusResponse response = fastApiClient.pollTaskStatus(taskId);
 
 				if ("completed".equalsIgnoreCase(response.status())) {
-					log.info("FastAPI 작업 완료: taskId={}", LogSanitizer.sanitize(fastApiTaskId));
+					log.info("FastAPI 작업 완료: taskId={}", taskId);
 					return response;
 				} else if ("failed".equalsIgnoreCase(response.status())) {
 					throw new CustomException(ErrorCode.ANALYSIS_FAILED);

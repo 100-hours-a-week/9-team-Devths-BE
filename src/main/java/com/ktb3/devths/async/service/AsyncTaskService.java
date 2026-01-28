@@ -57,12 +57,4 @@ public class AsyncTaskService {
 
 		task.markAsFailed(reason);
 	}
-
-	@Transactional
-	public void setExternalTaskId(Long taskId, String externalTaskId) {
-		AsyncTask task = asyncTaskRepository.findById(taskId)
-			.orElseThrow(() -> new CustomException(ErrorCode.ASYNC_TASK_NOT_FOUND));
-
-		task.setExternalTaskId(externalTaskId);
-	}
 }
