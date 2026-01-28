@@ -25,6 +25,7 @@ import com.ktb3.devths.global.exception.CustomException;
 import com.ktb3.devths.global.response.ErrorCode;
 import com.ktb3.devths.global.storage.domain.entity.S3Attachment;
 import com.ktb3.devths.global.storage.repository.S3AttachmentRepository;
+import com.ktb3.devths.global.storage.service.S3StorageService;
 import com.ktb3.devths.global.util.LogSanitizer;
 
 import lombok.RequiredArgsConstructor;
@@ -42,6 +43,7 @@ public class AsyncAnalysisProcessor {
 	private final AiChatRoomRepository aiChatRoomRepository;
 	private final S3AttachmentRepository s3AttachmentRepository;
 	private final AiOcrResultService aiOcrResultService;
+	private final S3StorageService s3StorageService;
 
 	@Async("taskExecutor")
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -110,9 +112,11 @@ public class AsyncAnalysisProcessor {
 			fileType = attachment.getMimeType();
 		}
 
+		String publicUrl = s3StorageService.getPublicUrl(s3Key);
+
 		return new FastApiAnalysisRequest.FastApiDocumentInfo(
 			fileId,
-			s3Key,
+			publicUrl,
 			fileType,
 			documentInfo.text()
 		);
