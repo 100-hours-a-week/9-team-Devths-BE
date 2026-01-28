@@ -30,7 +30,7 @@ public class CookieUtil {
 	 * @return Max-Age가 0인 Cookie 객체
 	 */
 	public static Cookie clearRefreshTokenCookie() {
-		Cookie cookie = new Cookie(REFRESH_TOKEN_COOKIE_NAME, null);
+		Cookie cookie = new Cookie(REFRESH_TOKEN_COOKIE_NAME, "");
 		cookie.setHttpOnly(true);
 		cookie.setSecure(true);
 		cookie.setPath(COOKIE_PATH);

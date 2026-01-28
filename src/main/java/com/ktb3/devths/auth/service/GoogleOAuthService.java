@@ -36,7 +36,6 @@ public class GoogleOAuthService {
 	public GoogleTokenResponse exchangeAuthCodeForToken(String authCode) {
 		try {
 			MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
-			//String code = URLDecoder.decode(authCode, StandardCharsets.UTF_8);
 			params.add("code", authCode);
 			params.add("client_id", googleOAuthProperties.getClientId());
 			params.add("client_secret", googleOAuthProperties.getClientSecret());
