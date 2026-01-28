@@ -43,7 +43,7 @@ SSM_PATH="/Dev/BE/"           # 기본값 (Dev)
 SPRING_PROFILE="dev"
 
 if [[ "$DEPLOYMENT_GROUP_NAME" == *"Prod"* ]]; then
-    SSM_PATH="/Main/BE/"      # Prod는 /Main/BE/ 사용
+    SSM_PATH="/Prod/BE/"
     SPRING_PROFILE="prod"
 fi
 
