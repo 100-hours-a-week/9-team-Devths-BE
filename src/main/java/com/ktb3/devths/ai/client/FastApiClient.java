@@ -12,6 +12,7 @@ import com.ktb3.devths.ai.analysis.dto.request.FastApiAnalysisRequest;
 import com.ktb3.devths.ai.analysis.dto.response.FastApiAnalysisResponse;
 import com.ktb3.devths.ai.analysis.dto.response.FastApiTaskStatusResponse;
 import com.ktb3.devths.ai.chatbot.dto.request.FastApiChatRequest;
+import com.ktb3.devths.ai.chatbot.dto.request.FastApiInterviewEvaluationRequest;
 import com.ktb3.devths.global.config.properties.FastApiProperties;
 import com.ktb3.devths.global.exception.CustomException;
 import com.ktb3.devths.global.response.ErrorCode;
@@ -81,8 +82,9 @@ public class FastApiClient {
 	}
 
 	public Flux<String> streamChatResponse(FastApiChatRequest request) {
+		String url = fastApiProperties.getBaseUrl() + "/ai/chat";
 		return webClient.post()
-			.uri("/ai/chat")
+			.uri(url)
 			.contentType(MediaType.APPLICATION_JSON)
 			.accept(MediaType.TEXT_EVENT_STREAM)
 			.bodyValue(request)
@@ -93,6 +95,24 @@ public class FastApiClient {
 			.doOnError(e -> log.error("FastAPI 스트리밍 실패", e))
 			.onErrorResume(e -> {
 				log.error("FastAPI 스트리밍 에러", e);
+				return Flux.error(new CustomException(ErrorCode.FASTAPI_CONNECTION_FAILED));
+			});
+	}
+
+	public Flux<String> streamInterviewEvaluation(FastApiInterviewEvaluationRequest request) {
+		String url = fastApiProperties.getBaseUrl() + "/ai/chat";
+		return webClient.post()
+			.uri(url)
+			.contentType(MediaType.APPLICATION_JSON)
+			.accept(MediaType.TEXT_EVENT_STREAM)
+			.bodyValue(request)
+			.retrieve()
+			.bodyToFlux(String.class)
+			.map(this::parseChunk)
+			.filter(chunk -> !chunk.equals("[DONE]"))
+			.doOnError(e -> log.error("FastAPI 면접 평가 스트리밍 실패", e))
+			.onErrorResume(e -> {
+				log.error("FastAPI 면접 평가 스트리밍 에러", e);
 				return Flux.error(new CustomException(ErrorCode.FASTAPI_CONNECTION_FAILED));
 			});
 	}

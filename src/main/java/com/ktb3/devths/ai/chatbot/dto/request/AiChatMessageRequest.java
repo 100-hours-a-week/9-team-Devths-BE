@@ -10,6 +10,8 @@ public record AiChatMessageRequest(
 	String content,
 
 	@NotNull(message = "AI 모델은 필수입니다")
-	AiModel model
+	AiModel model,
+
+	Long interviewId
 ) {
 }

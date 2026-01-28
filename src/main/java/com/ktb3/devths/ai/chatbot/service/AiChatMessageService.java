@@ -7,12 +7,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ktb3.devths.ai.analysis.domain.AiOcrResult;
+import com.ktb3.devths.ai.analysis.repository.AiOcrResultRepository;
 import com.ktb3.devths.ai.chatbot.domain.constant.MessageRole;
 import com.ktb3.devths.ai.chatbot.domain.constant.MessageType;
+import com.ktb3.devths.ai.chatbot.domain.entity.AiChatInterview;
 import com.ktb3.devths.ai.chatbot.domain.entity.AiChatMessage;
 import com.ktb3.devths.ai.chatbot.domain.entity.AiChatRoom;
 import com.ktb3.devths.ai.chatbot.dto.request.FastApiChatContext;
 import com.ktb3.devths.ai.chatbot.dto.request.FastApiChatRequest;
+import com.ktb3.devths.ai.chatbot.repository.AiChatInterviewRepository;
 import com.ktb3.devths.ai.chatbot.repository.AiChatMessageRepository;
 import com.ktb3.devths.ai.chatbot.repository.AiChatRoomRepository;
 import com.ktb3.devths.ai.client.FastApiClient;
@@ -32,6 +36,8 @@ public class AiChatMessageService {
 
 	private final AiChatMessageRepository aiChatMessageRepository;
 	private final AiChatRoomRepository aiChatRoomRepository;
+	private final AiChatInterviewRepository aiChatInterviewRepository;
+	private final AiOcrResultRepository aiOcrResultRepository;
 	private final FastApiClient fastApiClient;
 
 	@Transactional
@@ -50,11 +56,13 @@ public class AiChatMessageService {
 		return aiChatMessageRepository.save(message);
 	}
 
-	public Flux<String> streamChatResponse(Long userId, Long roomId, String content, AiModel model) {
-		log.info("AI 챗봇 스트리밍 시작: roomId={}, userId={}, model={}",
+	public Flux<String> streamChatResponse(Long userId, Long roomId, String content, AiModel model,
+		Long interviewId) {
+		log.info("AI 챗봇 스트리밍 시작: roomId={}, userId={}, model={}, interviewId={}",
 			LogSanitizer.sanitize(String.valueOf(roomId)),
 			LogSanitizer.sanitize(String.valueOf(userId)),
-			model);
+			model,
+			interviewId);
 
 		AiChatRoom room = aiChatRoomRepository.findByIdAndIsDeletedFalse(roomId)
 			.orElseThrow(() -> new CustomException(ErrorCode.AI_CHATROOM_NOT_FOUND));
@@ -63,15 +71,40 @@ public class AiChatMessageService {
 			throw new CustomException(ErrorCode.AI_CHATROOM_ACCESS_DENIED);
 		}
 
-		saveUserMessage(room, content);
+		AiChatInterview interview = null;
+		FastApiChatContext context = FastApiChatContext.createNormalMode();
+
+		if (interviewId != null) {
+			interview = aiChatInterviewRepository.findById(interviewId)
+				.orElseThrow(() -> new CustomException(ErrorCode.INTERVIEW_NOT_FOUND));
+
+			interview.incrementQuestionCount();
+
+			AiOcrResult ocrResult = aiOcrResultRepository.findByRoomId(roomId).orElse(null);
+			String resumeOcr = ocrResult != null ? ocrResult.getResumeOcr() : "";
+			String jobPostingOcr = ocrResult != null ? ocrResult.getJobPostingOcr() : "";
+
+			context = new FastApiChatContext(
+				"interview",
+				resumeOcr,
+				jobPostingOcr,
+				interview.getInterviewType().name().toLowerCase(),
+				interview.getCurrentQuestionCount()
+			);
+		}
+
+		MessageType messageType = interviewId != null ? MessageType.INTERVIEW : MessageType.NORMAL;
+		AiChatInterview finalInterview = interview;
+
+		saveUserMessage(room, content, messageType, interview);
 
 		FastApiChatRequest request = new FastApiChatRequest(
 			model.name().toLowerCase(),
 			roomId,
 			userId,
 			content,
-			null,
-			FastApiChatContext.createNormalMode()
+			interviewId,
+			context
 		);
 
 		StringBuilder fullResponse = new StringBuilder();
@@ -84,7 +117,7 @@ public class AiChatMessageService {
 			})
 			.doOnComplete(() -> {
 				if (!hasError.get()) {
-					saveAssistantMessage(room, fullResponse.toString(), model);
+					saveAssistantMessage(room, fullResponse.toString(), model, messageType, finalInterview);
 					log.info("AI 챗봇 스트리밍 완료: roomId={}, totalLength={}",
 						LogSanitizer.sanitize(String.valueOf(roomId)),
 						fullResponse.length());
@@ -99,18 +132,20 @@ public class AiChatMessageService {
 					metadata.put("model", model.name());
 					metadata.put("incomplete", true);
 					metadata.put("error", e.getMessage());
-					saveAssistantMessage(room, fullResponse.toString(), metadata);
+					saveAssistantMessage(room, fullResponse.toString(), metadata, messageType, finalInterview);
 				}
 			})
 			.onErrorResume(e -> Flux.just("ERROR:" + e.getMessage()));
 	}
 
 	@Transactional
-	public AiChatMessage saveUserMessage(AiChatRoom room, String content) {
+	public AiChatMessage saveUserMessage(AiChatRoom room, String content, MessageType type,
+		AiChatInterview interview) {
 		AiChatMessage message = AiChatMessage.builder()
 			.room(room)
+			.interview(interview)
 			.role(MessageRole.USER)
-			.type(MessageType.NORMAL)
+			.type(type)
 			.content(content)
 			.metadata(null)
 			.build();
@@ -119,19 +154,22 @@ public class AiChatMessageService {
 	}
 
 	@Transactional
-	public AiChatMessage saveAssistantMessage(AiChatRoom room, String content, AiModel model) {
+	public AiChatMessage saveAssistantMessage(AiChatRoom room, String content, AiModel model, MessageType type,
+		AiChatInterview interview) {
 		Map<String, Object> metadata = new HashMap<>();
 		metadata.put("model", model.name());
 
-		return saveAssistantMessage(room, content, metadata);
+		return saveAssistantMessage(room, content, metadata, type, interview);
 	}
 
 	@Transactional
-	public AiChatMessage saveAssistantMessage(AiChatRoom room, String content, Map<String, Object> metadata) {
+	public AiChatMessage saveAssistantMessage(AiChatRoom room, String content, Map<String, Object> metadata,
+		MessageType type, AiChatInterview interview) {
 		AiChatMessage message = AiChatMessage.builder()
 			.room(room)
+			.interview(interview)
 			.role(MessageRole.ASSISTANT)
-			.type(MessageType.NORMAL)
+			.type(type)
 			.content(content)
 			.metadata(metadata)
 			.build();
