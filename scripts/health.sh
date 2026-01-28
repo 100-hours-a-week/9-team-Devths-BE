@@ -29,6 +29,16 @@ do
   if [ ${RETRY_COUNT} -eq 10 ]
   then
     echo "> Health check 실패. "
+    
+    # [Cleanup] 실패한 프로세스 정리
+    echo "> 🧹 Health Check 실패 프로세스를 정리합니다."
+    IDLE_PORT=$(find_idle_port) # 포트 다시 확인
+    FAIL_PID=$(lsof -ti tcp:${IDLE_PORT})
+    if [ -n "${FAIL_PID}" ]; then
+        echo "> kill -9 $FAIL_PID"
+        kill -9 ${FAIL_PID}
+    fi
+    
     echo "> Nginx에 연결하지 않고 배포를 종료합니다."
     exit 1
   fi
