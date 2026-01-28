@@ -16,7 +16,7 @@ on:
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
   S3_BUCKET: ${{ secrets.AWS_S3_BUCKET_PROD }}
-  CODEDEPLOY_APP_NAME: ${{ secrets.CODEDEPLOY_APP_NAME }}
+  CODEDEPLOY_APPLICATION: ${{ secrets.CODEDEPLOY_APPLICATION }}
   CODEDEPLOY_DEPLOYMENT_GROUP: ${{ secrets.CODE_DEPLOY_GROUP_NAME_PROD }}
 
 jobs:
@@ -195,7 +195,7 @@ jobs:
           echo "🚀 Starting deployment to Production..."
 
           DEPLOYMENT_ID=$(aws deploy create-deployment \
-            --application-name ${{ env.CODEDEPLOY_APP_NAME }} \
+            --application-name ${{ env.CODEDEPLOY_APPLICATION }} \
             --deployment-group-name ${{ env.CODEDEPLOY_DEPLOYMENT_GROUP }} \
             --s3-location bucket=${{ env.S3_BUCKET }},key=${{ inputs.artifact_key }},bundleType=zip \
             --description "${{ inputs.deployment_comment }} (by ${{ github.actor }})" \
