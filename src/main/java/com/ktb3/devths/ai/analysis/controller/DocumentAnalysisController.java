@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.ktb3.devths.ai.analysis.dto.request.DocumentAnalysisRequest;
 import com.ktb3.devths.ai.analysis.dto.response.DocumentAnalysisResponse;
-import com.ktb3.devths.ai.analysis.service.DocumentAnalysisService;
+import com.ktb3.devths.ai.analysis.service.DocumentAnalysisFacade;
 import com.ktb3.devths.global.response.ApiResponse;
 import com.ktb3.devths.global.security.UserPrincipal;
 
@@ -25,7 +25,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class DocumentAnalysisController {
 
-	private final DocumentAnalysisService documentAnalysisService;
+	private final DocumentAnalysisFacade documentAnalysisFacade;
 
 	@PostMapping("/chatrooms/{roomId}/analysis")
 	public ResponseEntity<ApiResponse<DocumentAnalysisResponse>> startAnalysis(
@@ -36,7 +36,7 @@ public class DocumentAnalysisController {
 		long startTime = System.currentTimeMillis();
 		Long userId = userPrincipal.getUserId();
 
-		DocumentAnalysisResponse response = documentAnalysisService.startAnalysis(userId, roomId, request);
+		DocumentAnalysisResponse response = documentAnalysisFacade.startAnalysis(userId, roomId, request);
 
 		long duration = System.currentTimeMillis() - startTime;
 		log.info("분석 요청 응답 시간: {}ms (비동기 동작 확인: {}ms 미만이어야 정상)", duration, 1000);
