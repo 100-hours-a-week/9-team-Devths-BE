@@ -223,6 +223,7 @@ jobs:
             --output json > deployment_output.json
 
           DEPLOYMENT_ID=$(jq -r '.deploymentId' deployment_output.json)
+          S3_KEY="${S3_PREFIX}/$VERSION_NAME.zip"
           
           # GITHUB_OUTPUT에 값 기록
           echo "s3_key=$S3_KEY" >> $GITHUB_OUTPUT
