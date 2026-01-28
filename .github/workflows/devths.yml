@@ -14,7 +14,7 @@ concurrency:
 env:
   JAVA_VERSION: "21"
   AWS_REGION: ${{ secrets.AWS_REGION }}
-  S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
+  S3_BUCKET: ${{ github.ref_name == 'main' && secrets.AWS_S3_BUCKET_PROD || secrets.AWS_S3_BUCKET }}
   S3_PREFIX: BE/${{ github.ref_name }}
   CODEDEPLOY_APPLICATION: ${{ secrets.CODEDEPLOY_APPLICATION }}
   # 브랜치별 배포 그룹 이름 분기 (main=Devths-V1-BE-PROD-Group, release=Devths-V1-BE-STAGING-Group, develop=Devths-V1-BE-Dev-Group)
