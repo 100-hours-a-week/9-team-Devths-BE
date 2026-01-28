@@ -46,7 +46,7 @@ public class FastApiClient {
 				throw new CustomException(ErrorCode.FASTAPI_CONNECTION_FAILED);
 			}
 
-			log.info("FastAPI 분석 요청 성공: taskId={}", LogSanitizer.sanitize(response.taskId()));
+			log.info("FastAPI 분석 요청 성공: taskId={}", response.taskId());
 			return response;
 
 		} catch (RestClientException e) {
@@ -55,7 +55,7 @@ public class FastApiClient {
 		}
 	}
 
-	public FastApiTaskStatusResponse pollTaskStatus(String taskId) {
+	public FastApiTaskStatusResponse pollTaskStatus(Long taskId) {
 		try {
 			String url = fastApiProperties.getBaseUrl() + "/ai/task/" + taskId;
 
@@ -71,7 +71,7 @@ public class FastApiClient {
 			return response;
 
 		} catch (RestClientException e) {
-			log.error("FastAPI 작업 상태 조회 실패: taskId={}", LogSanitizer.sanitize(taskId), e);
+			log.error("FastAPI 작업 상태 조회 실패: taskId={}", taskId, e);
 			throw new CustomException(ErrorCode.FASTAPI_CONNECTION_FAILED);
 		}
 	}

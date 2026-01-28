@@ -72,9 +72,6 @@ public class AsyncTask {
 	@Column(name = "is_notified", nullable = true)
 	private boolean isNotified = false;
 
-	@Column(name = "external_task_id", nullable = true)
-	private String externalTaskId;
-
 	@Column(name = "fail_reason", nullable = true)
 	private String failReason;
 
@@ -89,9 +86,5 @@ public class AsyncTask {
 	public void markAsFailed(String reason) {
 		this.status = TaskStatus.FAILED;
 		this.failReason = reason;
-	}
-
-	public void setExternalTaskId(String externalTaskId) {
-		this.externalTaskId = externalTaskId;
 	}
 }

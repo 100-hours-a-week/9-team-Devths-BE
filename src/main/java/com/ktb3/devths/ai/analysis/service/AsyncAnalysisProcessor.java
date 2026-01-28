@@ -41,6 +41,7 @@ public class AsyncAnalysisProcessor {
 	private final AiChatMessageService aiChatMessageService;
 	private final AiChatRoomRepository aiChatRoomRepository;
 	private final S3AttachmentRepository s3AttachmentRepository;
+	private final AiOcrResultService aiOcrResultService;
 
 	@Async("taskExecutor")
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -51,13 +52,11 @@ public class AsyncAnalysisProcessor {
 
 			asyncTaskService.updateStatus(taskId, TaskStatus.PROCESSING);
 
-			FastApiAnalysisRequest fastApiRequest = buildFastApiRequest(userId, roomId, request);
+			FastApiAnalysisRequest fastApiRequest = buildFastApiRequest(taskId, userId, roomId, request);
 
 			FastApiAnalysisResponse analysisResponse = fastApiClient.requestAnalysis(fastApiRequest);
 
-			asyncTaskService.setExternalTaskId(taskId, analysisResponse.taskId());
-
-			FastApiTaskStatusResponse statusResponse = pollFastApiTask(analysisResponse.taskId());
+			FastApiTaskStatusResponse statusResponse = pollFastApiTask(taskId);
 
 			if ("completed".equalsIgnoreCase(statusResponse.status())) {
 				handleAnalysisSuccess(taskId, roomId, statusResponse);
@@ -75,7 +74,7 @@ public class AsyncAnalysisProcessor {
 		}
 	}
 
-	private FastApiAnalysisRequest buildFastApiRequest(Long userId, Long roomId,
+	private FastApiAnalysisRequest buildFastApiRequest(Long taskId, Long userId, Long roomId,
 		DocumentAnalysisRequest request) {
 
 		FastApiAnalysisRequest.FastApiDocumentInfo resumeInfo = buildDocumentInfo(request.resume(), userId);
@@ -83,6 +82,7 @@ public class AsyncAnalysisProcessor {
 			userId);
 
 		return new FastApiAnalysisRequest(
+			taskId,
 			request.model().name().toLowerCase(),
 			roomId,
 			userId,
@@ -118,16 +118,16 @@ public class AsyncAnalysisProcessor {
 		);
 	}
 
-	private FastApiTaskStatusResponse pollFastApiTask(String fastApiTaskId) {
+	private FastApiTaskStatusResponse pollFastApiTask(Long taskId) {
 		int maxAttempts = fastApiProperties.getMaxPollAttempts();
 		int pollInterval = fastApiProperties.getPollInterval();
 
 		for (int attempt = 0; attempt < maxAttempts; attempt++) {
 			try {
-				FastApiTaskStatusResponse response = fastApiClient.pollTaskStatus(fastApiTaskId);
+				FastApiTaskStatusResponse response = fastApiClient.pollTaskStatus(taskId);
 
 				if ("completed".equalsIgnoreCase(response.status())) {
-					log.info("FastAPI 작업 완료: taskId={}", LogSanitizer.sanitize(fastApiTaskId));
+					log.info("FastAPI 작업 완료: taskId={}", taskId);
 					return response;
 				} else if ("failed".equalsIgnoreCase(response.status())) {
 					throw new CustomException(ErrorCode.ANALYSIS_FAILED);
@@ -173,6 +173,8 @@ public class AsyncAnalysisProcessor {
 			);
 
 			chatRoom.updateTitle(summary);
+
+			saveOcrResultIfPresent(chatRoom, statusResponse.result());
 
 			Map<String, Object> result = new HashMap<>();
 			result.put("messageId", message.getId());
@@ -274,6 +276,31 @@ public class AsyncAnalysisProcessor {
 			for (Object item : list) {
 				content.append("- ").append(item).append("\n");
 			}
+		}
+	}
+
+	private void saveOcrResultIfPresent(AiChatRoom chatRoom, Map<String, Object> result) {
+		try {
+			if (result == null) {
+				return;
+			}
+
+			Object resumeOcrObj = result.get("resume_ocr");
+			Object jobPostingOcrObj = result.get("job_posting_ocr");
+
+			if (resumeOcrObj == null || jobPostingOcrObj == null) {
+				log.warn("OCR 데이터가 없습니다. OCR 저장을 건너뜁니다: roomId={}", chatRoom.getId());
+				return;
+			}
+
+			String resumeOcr = resumeOcrObj.toString();
+			String jobPostingOcr = jobPostingOcrObj.toString();
+
+			aiOcrResultService.saveOcrResult(chatRoom, resumeOcr, jobPostingOcr);
+			log.info("OCR 결과 저장 성공: roomId={}", chatRoom.getId());
+
+		} catch (Exception e) {
+			log.error("OCR 결과 저장 중 오류 발생 (분석 결과는 정상 처리됨): roomId={}", chatRoom.getId(), e);
 		}
 	}
 }

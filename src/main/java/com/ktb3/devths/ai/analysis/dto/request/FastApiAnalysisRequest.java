@@ -3,6 +3,9 @@ package com.ktb3.devths.ai.analysis.dto.request;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 public record FastApiAnalysisRequest(
+	@JsonProperty("task_id")
+	Long taskId,
+
 	String model,
 
 	@JsonProperty("room_id")
