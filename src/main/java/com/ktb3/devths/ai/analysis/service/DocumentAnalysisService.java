@@ -31,7 +31,6 @@ public class DocumentAnalysisService {
 	private final AiChatRoomRepository aiChatRoomRepository;
 	private final AsyncTaskRepository asyncTaskRepository;
 	private final AsyncTaskService asyncTaskService;
-	private final AsyncAnalysisProcessor asyncAnalysisProcessor;
 
 	@Transactional
 	public DocumentAnalysisResponse startAnalysis(Long userId, Long roomId,
@@ -66,8 +65,6 @@ public class DocumentAnalysisService {
 		}
 
 		AsyncTask task = asyncTaskService.createTask(user, TaskType.ANALYSIS, roomId);
-
-		asyncAnalysisProcessor.processAnalysis(task.getId(), userId, roomId, request);
 
 		return new DocumentAnalysisResponse(task.getId(), TaskStatus.PENDING.name());
 	}
