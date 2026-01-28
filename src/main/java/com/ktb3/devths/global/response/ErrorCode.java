@@ -37,11 +37,13 @@ public enum ErrorCode {
 	USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다"),
 	AI_CHATROOM_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 AI 채팅방을 찾을 수 없습니다"),
 	ASYNC_TASK_NOT_FOUND(HttpStatus.NOT_FOUND, "비동기 작업을 찾을 수 없습니다"),
+	INTERVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "면접을 찾을 수 없습니다"),
 
 	// 409 Conflict
 	DUPLICATE_EMAIL(HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다"),
 	DUPLICATE_NICKNAME(HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다"),
 	DUPLICATE_ANALYSIS(HttpStatus.CONFLICT, "이미 진행 중인 분석 작업이 있습니다"),
+	INTERVIEW_ALREADY_IN_PROGRESS(HttpStatus.CONFLICT, "이미 진행 중인 면접이 있습니다"),
 
 	// 500 Internal Server Error
 	INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다"),
