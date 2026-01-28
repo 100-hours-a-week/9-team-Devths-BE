@@ -41,6 +41,7 @@ public class AsyncAnalysisProcessor {
 	private final AiChatMessageService aiChatMessageService;
 	private final AiChatRoomRepository aiChatRoomRepository;
 	private final S3AttachmentRepository s3AttachmentRepository;
+	private final AiOcrResultService aiOcrResultService;
 
 	@Async("taskExecutor")
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -173,6 +174,8 @@ public class AsyncAnalysisProcessor {
 
 			chatRoom.updateTitle(summary);
 
+			saveOcrResultIfPresent(chatRoom, statusResponse.result());
+
 			Map<String, Object> result = new HashMap<>();
 			result.put("messageId", message.getId());
 			result.put("fastApiTaskId", statusResponse.taskId());
@@ -273,6 +276,31 @@ public class AsyncAnalysisProcessor {
 			for (Object item : list) {
 				content.append("- ").append(item).append("\n");
 			}
+		}
+	}
+
+	private void saveOcrResultIfPresent(AiChatRoom chatRoom, Map<String, Object> result) {
+		try {
+			if (result == null) {
+				return;
+			}
+
+			Object resumeOcrObj = result.get("resume_ocr");
+			Object jobPostingOcrObj = result.get("job_posting_ocr");
+
+			if (resumeOcrObj == null || jobPostingOcrObj == null) {
+				log.warn("OCR 데이터가 없습니다. OCR 저장을 건너뜁니다: roomId={}", chatRoom.getId());
+				return;
+			}
+
+			String resumeOcr = resumeOcrObj.toString();
+			String jobPostingOcr = jobPostingOcrObj.toString();
+
+			aiOcrResultService.saveOcrResult(chatRoom, resumeOcr, jobPostingOcr);
+			log.info("OCR 결과 저장 성공: roomId={}", chatRoom.getId());
+
+		} catch (Exception e) {
+			log.error("OCR 결과 저장 중 오류 발생 (분석 결과는 정상 처리됨): roomId={}", chatRoom.getId(), e);
 		}
 	}
 }

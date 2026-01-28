@@ -6,8 +6,10 @@ import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+import com.ktb3.devths.ai.analysis.domain.AiOcrResult;
 import com.ktb3.devths.user.domain.entity.User;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
@@ -17,6 +19,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -39,6 +42,9 @@ public class AiChatRoom {
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "user_id")
 	private User user;
+
+	@OneToOne(mappedBy = "room", cascade = CascadeType.REMOVE, orphanRemoval = true)
+	private AiOcrResult aiOcrResult;
 
 	@Column(name = "room_uuid", unique = true, nullable = false)
 	private String roomUuid;
