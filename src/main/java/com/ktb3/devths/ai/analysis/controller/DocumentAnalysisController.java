@@ -21,13 +21,13 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/ai")
+@RequestMapping("/api/ai-chatrooms")
 @RequiredArgsConstructor
 public class DocumentAnalysisController {
 
 	private final DocumentAnalysisFacade documentAnalysisFacade;
 
-	@PostMapping("/chatrooms/{roomId}/analysis")
+	@PostMapping("/{roomId}/analysis")
 	public ResponseEntity<ApiResponse<DocumentAnalysisResponse>> startAnalysis(
 		@AuthenticationPrincipal UserPrincipal userPrincipal,
 		@PathVariable Long roomId,
