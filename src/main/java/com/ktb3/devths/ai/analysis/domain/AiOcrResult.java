@@ -31,9 +31,9 @@ public class AiOcrResult {
 	@JoinColumn(name = "room_id")
 	private AiChatRoom room;
 
-	@Column(name = "resume_ocr", nullable = false)
+	@Column(name = "resume_ocr", nullable = false, columnDefinition = "TEXT")
 	private String resumeOcr;
 
-	@Column(name = "job_posting_ocr", nullable = false)
+	@Column(name = "job_posting_ocr", nullable = false, columnDefinition = "TEXT")
 	private String jobPostingOcr;
 }
