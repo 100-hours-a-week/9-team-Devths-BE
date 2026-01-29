@@ -138,7 +138,7 @@ jobs:
     if: success()
     outputs:
       deployment_id: ${{ steps.codedeploy.outputs.deployment_id }}
-      s3_key: ${{ steps.codedeploy.outputs.s3_key }}
+      s3_key: ${{ steps.s3-upload.outputs.s3_key }}
 
     steps:
       - name: 체크아웃
@@ -200,12 +200,18 @@ jobs:
           ls -lh "$VERSION_NAME.zip"
 
       - name: S3로 배포 패키지 업로드
+        id: s3-upload
         run: |
           VERSION_NAME="${{ steps.package.outputs.version_name }}"
           DEST="s3://${S3_BUCKET}/${S3_PREFIX}"
-          
+          S3_KEY="${S3_PREFIX}/$VERSION_NAME.zip"
+
           echo "🚀 Uploading $VERSION_NAME.zip to $DEST"
           aws s3 cp "$VERSION_NAME.zip" "$DEST/$VERSION_NAME.zip" --only-show-errors
+
+          # GITHUB_OUTPUT에 S3 Key 기록 (모든 브랜치에서 공통)
+          echo "s3_key=$S3_KEY" >> $GITHUB_OUTPUT
+          echo "📂 S3 Key: $S3_KEY"
 
       - name: AWS CodeDeploy 배포 요청
         id: codedeploy
@@ -223,13 +229,11 @@ jobs:
             --output json > deployment_output.json
 
           DEPLOYMENT_ID=$(jq -r '.deploymentId' deployment_output.json)
-          
+
           # GITHUB_OUTPUT에 값 기록
-          echo "s3_key=$S3_KEY" >> $GITHUB_OUTPUT
           echo "deployment_id=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
-          
+
           echo "🚀 Deployment ID: $DEPLOYMENT_ID"
-          echo "📂 S3 Key: $S3_KEY"
 
   # CI 단계 Discord 알림 (Build & Upload)
   notify-ci:
@@ -268,7 +272,7 @@ jobs:
             - Deployment: ${{ needs.deploy.result == 'success' && '✅' || (needs.deploy.result == 'skipped' && '⏭️' || '❌') }}
 
             ${{ needs.build_and_analyze.result != 'success' && '⚠️ **정적 분석 실패로 인해 빌드가 중단되었습니다.**' || '' }}
-            **📂 S3 Key**: `${{needs.deploy.outputs.s3_key}}
+            **📂 S3 Key**: `${{needs.deploy.outputs.s3_key}}`
             **🔗 링크**: [커밋 확인하기](${{ github.event.repository.html_url }}/commit/${{ github.sha }})
 
           color: "${{ (needs.lint.result == 'success' && needs.build_and_analyze.result == 'success' && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped')) && 65280 || 16711680 }}"
