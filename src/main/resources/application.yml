@@ -78,6 +78,13 @@ management:
   endpoint:
     health:
       show-details: never
+  cloudwatch:
+    metrics:
+      export:
+        namespace: ${CW_NAME_SPACE:local}
+        step: 60s
+        enabled: true
+
 
 fastapi:
   base-url: ${FASTAPI_BASE_URL}
