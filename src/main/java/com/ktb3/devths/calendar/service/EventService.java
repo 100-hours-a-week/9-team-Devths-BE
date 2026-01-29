@@ -1,5 +1,7 @@
 package com.ktb3.devths.calendar.service;
 
+import java.util.List;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -7,6 +9,7 @@ import com.ktb3.devths.calendar.domain.constant.NotificationUnit;
 import com.ktb3.devths.calendar.dto.internal.GoogleEventMapping;
 import com.ktb3.devths.calendar.dto.request.EventCreateRequest;
 import com.ktb3.devths.calendar.dto.response.EventCreateResponse;
+import com.ktb3.devths.calendar.dto.response.EventListResponse;
 import com.ktb3.devths.global.exception.CustomException;
 import com.ktb3.devths.global.response.ErrorCode;
 import com.ktb3.devths.user.domain.entity.User;
@@ -57,6 +60,40 @@ public class EventService {
 
 		log.info("일정 추가 완료: userId={}, eventId={}", userId, eventId);
 		return EventCreateResponse.of(eventId);
+	}
+
+	/**
+	 * Google Calendar 일정 목록 조회
+	 *
+	 * @param userId 사용자 ID
+	 * @param startDate 조회 시작 날짜
+	 * @param endDate 조회 종료 날짜
+	 * @param stage 필터: 전형 단계 (선택)
+	 * @param tag 필터: 태그 (선택)
+	 * @return 일정 목록
+	 */
+	@Transactional(readOnly = true)
+	public List<EventListResponse> listEvents(
+		Long userId,
+		java.time.LocalDate startDate,
+		java.time.LocalDate endDate,
+		com.ktb3.devths.calendar.domain.constant.InterviewStage stage,
+		String tag
+	) {
+		// 1. 사용자 조회 및 검증
+		User user = userRepository.findById(userId)
+			.orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+		if (user.isWithdraw()) {
+			throw new CustomException(ErrorCode.WITHDRAWN_USER);
+		}
+
+		// 2. 날짜 범위를 LocalDateTime으로 변환 (Asia/Seoul 기준)
+		java.time.LocalDateTime startDateTime = startDate.atStartOfDay();
+		java.time.LocalDateTime endDateTime = endDate.atTime(23, 59, 59);
+
+		// 3. Google Calendar API 호출
+		return googleCalendarService.listEvents(userId, startDateTime, endDateTime, stage, tag);
 	}
 
 	/**
