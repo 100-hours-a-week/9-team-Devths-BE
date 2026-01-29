@@ -65,6 +65,42 @@ public class GoogleOAuthService {
 	}
 
 	/**
+	 * Google Refresh Token으로 새 Access Token 발급
+	 *
+	 * @param refreshToken Google Refresh Token (복호화된 평문)
+	 * @return Google Token Response (accessToken, expiresIn)
+	 */
+	public GoogleTokenResponse refreshGoogleToken(String refreshToken) {
+		try {
+			MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+			params.add("refresh_token", refreshToken);
+			params.add("client_id", googleOAuthProperties.getClientId());
+			params.add("client_secret", googleOAuthProperties.getClientSecret());
+			params.add("grant_type", "refresh_token");
+
+			GoogleTokenResponse response = restClient.post()
+				.uri(GOOGLE_TOKEN_URL)
+				.contentType(MediaType.APPLICATION_FORM_URLENCODED)
+				.body(params)
+				.retrieve()
+				.body(GoogleTokenResponse.class);
+
+			if (response == null || response.accessToken() == null) {
+				log.error("Google 토큰 갱신 실패: 응답이 null이거나 accessToken이 없습니다");
+				throw new CustomException(ErrorCode.GOOGLE_TOKEN_REFRESH_FAILED);
+			}
+
+			log.info("Google 토큰 갱신 성공");
+			return response;
+		} catch (CustomException e) {
+			throw e;
+		} catch (Exception e) {
+			log.error("Google 토큰 갱신 중 오류 발생", e);
+			throw new CustomException(ErrorCode.GOOGLE_TOKEN_REFRESH_FAILED);
+		}
+	}
+
+	/**
 	 * Google ID Token을 검증하고 사용자 정보를 추출
 	 *
 	 * @param idToken Google ID Token

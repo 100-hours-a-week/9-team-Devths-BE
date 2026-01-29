@@ -9,5 +9,7 @@ import com.ktb3.devths.user.domain.entity.SocialAccount;
 public interface SocialAccountRepository extends JpaRepository<SocialAccount, Long> {
 	Optional<SocialAccount> findByProviderAndProviderUserId(String provider, String providerUserId);
 
+	Optional<SocialAccount> findByUser_IdAndProvider(Long userId, String provider);
+
 	void deleteAllByUser_Id(Long userId);
 }
