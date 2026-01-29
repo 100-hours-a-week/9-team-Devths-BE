@@ -160,6 +160,28 @@ public class EventService {
 	}
 
 	/**
+	 * Google Calendar 일정 삭제
+	 *
+	 * @param userId 사용자 ID
+	 * @param eventId Google Calendar Event ID
+	 */
+	@Transactional
+	public void deleteEvent(Long userId, String eventId) {
+		// 1. 사용자 조회 및 검증
+		User user = userRepository.findById(userId)
+			.orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+		if (user.isWithdraw()) {
+			throw new CustomException(ErrorCode.WITHDRAWN_USER);
+		}
+
+		// 2. Google Calendar API 호출
+		googleCalendarService.deleteEvent(userId, eventId);
+
+		log.info("일정 삭제 완료: userId={}, eventId={}", userId, eventId);
+	}
+
+	/**
 	 * 알림 시간을 분 단위로 변환
 	 */
 	private int convertToMinutes(int notificationTime, NotificationUnit unit) {

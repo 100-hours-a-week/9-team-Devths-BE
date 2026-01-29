@@ -265,6 +265,57 @@ public class GoogleCalendarService {
 	}
 
 	/**
+	 * Google Calendar 일정 삭제
+	 *
+	 * @param userId 사용자 ID
+	 * @param eventId Google Calendar Event ID
+	 */
+	@Transactional
+	public void deleteEvent(Long userId, String eventId) {
+		try {
+			// 1. SocialAccount 조회
+			SocialAccount socialAccount = socialAccountRepository.findByUser_IdAndProvider(userId, "GOOGLE")
+				.orElseThrow(() -> new CustomException(ErrorCode.UNAUTHORIZED));
+
+			// 2. 토큰 만료 체크 및 갱신
+			refreshAccessTokenIfExpired(socialAccount);
+
+			// 3. Google Calendar 클라이언트 생성
+			Calendar calendarService = buildCalendarClient(socialAccount);
+
+			// 4. 기존 일정 조회 및 권한 확인
+			Event existingEvent = calendarService.events()
+				.get("primary", eventId)
+				.execute();
+
+			if (existingEvent.getExtendedProperties() == null
+				|| existingEvent.getExtendedProperties().getPrivate() == null
+				|| !"devths".equals(existingEvent.getExtendedProperties().getPrivate().get("source"))) {
+				throw new CustomException(ErrorCode.EVENT_ACCESS_DENIED);
+			}
+
+			// 5. Google Calendar API 호출
+			calendarService.events()
+				.delete("primary", eventId)
+				.execute();
+
+			log.info("Google Calendar 일정 삭제 성공: userId={}, eventId={}", userId, eventId);
+
+		} catch (CustomException e) {
+			throw e;
+		} catch (GoogleJsonResponseException e) {
+			if (e.getStatusCode() == 404) {
+				throw new CustomException(ErrorCode.EVENT_NOT_FOUND);
+			}
+			log.error("Google Calendar 일정 삭제 실패: userId={}, eventId={}", userId, eventId, e);
+			throw new CustomException(ErrorCode.GOOGLE_CALENDAR_CREATE_FAILED);
+		} catch (Exception e) {
+			log.error("Google Calendar 일정 삭제 실패: userId={}, eventId={}", userId, eventId, e);
+			throw new CustomException(ErrorCode.GOOGLE_CALENDAR_CREATE_FAILED);
+		}
+	}
+
+	/**
 	 * tag 필터 매칭 (백엔드에서 처리)
 	 */
 	private boolean matchesTagFilter(Event event, String tag) {

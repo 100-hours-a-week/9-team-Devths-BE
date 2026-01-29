@@ -7,6 +7,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -44,6 +45,7 @@ public class EventController {
 	 * @return 일정 추가 응답
 	 */
 	@PostMapping
+	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201")
 	public ResponseEntity<ApiResponse<EventCreateResponse>> createEvent(
 		@AuthenticationPrincipal UserPrincipal userPrincipal,
 		@Valid @RequestBody EventCreateRequest request
@@ -125,5 +127,23 @@ public class EventController {
 
 		return ResponseEntity
 			.ok(ApiResponse.success("일정이 성공적으로 수정되었습니다.", response));
+	}
+
+	/**
+	 * Google Calendar 일정 삭제
+	 *
+	 * @param userPrincipal 인증된 사용자
+	 * @param eventId Google Calendar Event ID
+	 * @return 204 No Content
+	 */
+	@DeleteMapping("/{eventId}")
+	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204")
+	public ResponseEntity<Void> deleteEvent(
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		@PathVariable String eventId
+	) {
+		eventService.deleteEvent(userPrincipal.getUserId(), eventId);
+
+		return ResponseEntity.noContent().build();
 	}
 }
