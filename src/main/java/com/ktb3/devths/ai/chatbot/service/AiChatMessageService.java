@@ -85,7 +85,7 @@ public class AiChatMessageService {
 			String jobPostingOcr = ocrResult != null ? ocrResult.getJobPostingOcr() : "";
 
 			context = new FastApiChatContext(
-				"interview",
+				MessageType.INTERVIEW.name().toLowerCase(),
 				resumeOcr,
 				jobPostingOcr,
 				interview.getInterviewType().name().toLowerCase(),
