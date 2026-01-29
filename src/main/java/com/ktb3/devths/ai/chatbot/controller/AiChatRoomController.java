@@ -168,6 +168,13 @@ public class AiChatRoomController {
 		@PathVariable Long roomId,
 		@Valid @RequestBody InterviewEvaluationRequest request
 	) {
+		AiChatRoom room = aiChatRoomRepository.findByIdAndIsDeletedFalse(roomId)
+			.orElseThrow(() -> new CustomException(ErrorCode.AI_CHATROOM_NOT_FOUND));
+
+		if (!room.getUser().getId().equals(userPrincipal.getUserId())) {
+			throw new CustomException(ErrorCode.AI_CHATROOM_ACCESS_DENIED);
+		}
+
 		Flux<String> evaluationStream = aiChatInterviewService.evaluateInterview(request.interviewId());
 
 		return evaluationStream
