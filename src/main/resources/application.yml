@@ -78,10 +78,10 @@ management:
   endpoint:
     health:
       show-details: never
-  cloudwatch:
-    metrics:
-      export:
-        namespace: ${CW_NAME_SPACE:local}
+  metrics:
+    export:
+      cloudwatch:
+        namespace: ${CW_NAME_SPACE:devths-local}
         step: 60s
         enabled: true
 
