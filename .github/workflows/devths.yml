@@ -239,7 +239,7 @@ jobs:
   notify-ci:
     name: notify-ci
     runs-on: ubuntu-22.04
-    needs: [ lint, build_and_analyze, deploy ]
+    needs: [ lint, build_and_analyze ]
     if: always()
     steps:
       - name: 데이터 준비

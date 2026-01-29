@@ -132,6 +132,14 @@ done
 if [ "$SUCCESS" = false ]; then
     echo "❌ [Boot Error] 지정된 시간(180초) 내에 애플리케이션이 포트($IDLE_PORT)를 점유하지 못했습니다."
     
+    # [Cleanup] 실패한 프로세스 정리 (Resource cleanup)
+    echo "> 🧹 배포에 실패한 프로세스를 정리합니다."
+    FAIL_PID=$(lsof -ti tcp:${IDLE_PORT})
+    if [ -n "${FAIL_PID}" ]; then
+        echo "> kill -9 $FAIL_PID"
+        kill -9 ${FAIL_PID}
+    fi
+    
     # 로그 분석
     echo "=========== 실패 원인 분석 (로그 스캔) ==========="
     if grep -q "PortInUseException" $LOG_FILE || grep -q "BindException" $LOG_FILE; then
