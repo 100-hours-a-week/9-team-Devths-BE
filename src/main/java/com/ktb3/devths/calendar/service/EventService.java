@@ -11,6 +11,7 @@ import com.ktb3.devths.calendar.domain.constant.InterviewStage;
 import com.ktb3.devths.calendar.domain.constant.NotificationUnit;
 import com.ktb3.devths.calendar.dto.internal.GoogleEventMapping;
 import com.ktb3.devths.calendar.dto.request.EventCreateRequest;
+import com.ktb3.devths.calendar.dto.request.EventUpdateRequest;
 import com.ktb3.devths.calendar.dto.response.EventCreateResponse;
 import com.ktb3.devths.calendar.dto.response.EventDetailResponse;
 import com.ktb3.devths.calendar.dto.response.EventListResponse;
@@ -119,6 +120,43 @@ public class EventService {
 
 		// 2. Google Calendar API 호출
 		return googleCalendarService.getEvent(userId, eventId);
+	}
+
+	/**
+	 * Google Calendar 일정 수정
+	 *
+	 * @param userId 사용자 ID
+	 * @param eventId Google Calendar Event ID
+	 * @param request 일정 수정 요청
+	 * @return 일정 수정 응답 (Google Calendar Event ID)
+	 */
+	@Transactional
+	public EventCreateResponse updateEvent(Long userId, String eventId, EventUpdateRequest request) {
+		// 1. 사용자 조회 및 검증
+		User user = userRepository.findById(userId)
+			.orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+		if (user.isWithdraw()) {
+			throw new CustomException(ErrorCode.WITHDRAWN_USER);
+		}
+
+		// 2. Google Calendar 매핑 객체 생성
+		GoogleEventMapping mapping = GoogleEventMapping.builder()
+			.summary(request.title())
+			.company(request.company())
+			.description(request.description())
+			.startTime(request.startTime())
+			.endTime(request.endTime())
+			.stage(request.stage())
+			.tags(request.tags())
+			.notificationMinutes(convertToMinutes(request.notificationTime(), request.notificationUnit()))
+			.build();
+
+		// 3. Google Calendar API 호출
+		String updatedEventId = googleCalendarService.updateEvent(userId, eventId, mapping);
+
+		log.info("일정 수정 완료: userId={}, eventId={}", userId, updatedEventId);
+		return EventCreateResponse.of(updatedEventId);
 	}
 
 	/**
