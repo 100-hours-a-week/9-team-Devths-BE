@@ -25,6 +25,7 @@ import com.ktb3.devths.global.storage.domain.entity.S3Attachment;
 import com.ktb3.devths.global.storage.repository.S3AttachmentRepository;
 import com.ktb3.devths.global.storage.service.S3StorageService;
 import com.ktb3.devths.global.util.LogSanitizer;
+import com.ktb3.devths.notification.service.NotificationService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +43,7 @@ public class AsyncAnalysisProcessor {
 	private final S3AttachmentRepository s3AttachmentRepository;
 	private final AiOcrResultService aiOcrResultService;
 	private final S3StorageService s3StorageService;
+	private final NotificationService notificationService;
 
 	@Async("taskExecutor")
 	public void processAnalysis(Long taskId, Long userId, Long roomId, DocumentAnalysisRequest request) {
@@ -204,6 +206,17 @@ public class AsyncAnalysisProcessor {
 			result.put("analysisData", statusResponse.result());
 
 			asyncTaskService.updateResult(taskId, result);
+
+			// 알림 생성
+			try {
+				notificationService.createAnalysisCompleteNotification(
+					chatRoom.getUser(),
+					roomId,
+					summary
+				);
+			} catch (Exception e) {
+				log.warn("알림 생성 실패 (분석 결과는 정상 저장됨): roomId={}", roomId, e);
+			}
 
 			log.info("분석 완료 및 결과 저장 성공: taskId={}, messageId={}", taskId, message.getId());
 
