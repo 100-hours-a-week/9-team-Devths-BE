@@ -84,7 +84,7 @@ public class GoogleCalendarService {
 				.insert("primary", event)
 				.execute();
 
-			log.info("Google Calendar 일정 추가 성공: userId={}, eventId={}", userId, createdEvent.getId());
+			log.info("Google Calendar 일정 추가 성공: userId={}", userId);
 			return createdEvent.getId();
 		} catch (CustomException e) {
 			throw e;
@@ -199,10 +199,10 @@ public class GoogleCalendarService {
 			if (e.getStatusCode() == 404) {
 				throw new CustomException(ErrorCode.EVENT_NOT_FOUND);
 			}
-			log.error("Google Calendar 일정 상세 조회 실패: userId={}, eventId={}", userId, eventId, e);
+			log.error("Google Calendar 일정 상세 조회 실패: userId={}", userId, e);
 			throw new CustomException(ErrorCode.GOOGLE_CALENDAR_CREATE_FAILED);
 		} catch (Exception e) {
-			log.error("Google Calendar 일정 상세 조회 실패: userId={}, eventId={}", userId, eventId, e);
+			log.error("Google Calendar 일정 상세 조회 실패: userId={}", userId, e);
 			throw new CustomException(ErrorCode.GOOGLE_CALENDAR_CREATE_FAILED);
 		}
 	}
@@ -247,7 +247,7 @@ public class GoogleCalendarService {
 				.update("primary", eventId, event)
 				.execute();
 
-			log.info("Google Calendar 일정 수정 성공: userId={}, eventId={}", userId, updatedEvent.getId());
+			log.info("Google Calendar 일정 수정 성공: userId={}", userId);
 			return updatedEvent.getId();
 
 		} catch (CustomException e) {
@@ -256,10 +256,10 @@ public class GoogleCalendarService {
 			if (e.getStatusCode() == 404) {
 				throw new CustomException(ErrorCode.EVENT_NOT_FOUND);
 			}
-			log.error("Google Calendar 일정 수정 실패: userId={}, eventId={}", userId, eventId, e);
+			log.error("Google Calendar 일정 수정 실패: userId={}", userId, e);
 			throw new CustomException(ErrorCode.GOOGLE_CALENDAR_CREATE_FAILED);
 		} catch (Exception e) {
-			log.error("Google Calendar 일정 수정 실패: userId={}, eventId={}", userId, eventId, e);
+			log.error("Google Calendar 일정 수정 실패: userId={}", userId, e);
 			throw new CustomException(ErrorCode.GOOGLE_CALENDAR_CREATE_FAILED);
 		}
 	}
@@ -299,7 +299,7 @@ public class GoogleCalendarService {
 				.delete("primary", eventId)
 				.execute();
 
-			log.info("Google Calendar 일정 삭제 성공: userId={}, eventId={}", userId, eventId);
+			log.info("Google Calendar 일정 삭제 성공: userId={}", userId);
 
 		} catch (CustomException e) {
 			throw e;
@@ -307,10 +307,10 @@ public class GoogleCalendarService {
 			if (e.getStatusCode() == 404) {
 				throw new CustomException(ErrorCode.EVENT_NOT_FOUND);
 			}
-			log.error("Google Calendar 일정 삭제 실패: userId={}, eventId={}", userId, eventId, e);
+			log.error("Google Calendar 일정 삭제 실패: userId={}", userId, e);
 			throw new CustomException(ErrorCode.GOOGLE_CALENDAR_CREATE_FAILED);
 		} catch (Exception e) {
-			log.error("Google Calendar 일정 삭제 실패: userId={}, eventId={}", userId, eventId, e);
+			log.error("Google Calendar 일정 삭제 실패: userId={}", userId, e);
 			throw new CustomException(ErrorCode.GOOGLE_CALENDAR_CREATE_FAILED);
 		}
 	}
@@ -327,7 +327,7 @@ public class GoogleCalendarService {
 			List<String> tags = objectMapper.readValue(tagsJson, List.class);
 			return tags.contains(tag);
 		} catch (Exception e) {
-			log.warn("태그 파싱 실패: eventId={}", event.getId());
+			log.warn("태그 파싱 실패");
 			return false;
 		}
 	}
@@ -355,7 +355,7 @@ public class GoogleCalendarService {
 				tags
 			);
 		} catch (Exception e) {
-			log.error("Event 변환 실패: eventId={}", event.getId(), e);
+			log.error("Event 변환 실패", e);
 			throw new CustomException(ErrorCode.INTERNAL_SERVER_ERROR);
 		}
 	}
@@ -424,7 +424,7 @@ public class GoogleCalendarService {
 				updatedAt
 			);
 		} catch (Exception e) {
-			log.error("Event 상세 변환 실패: eventId={}", event.getId(), e);
+			log.error("Event 상세 변환 실패", e);
 			throw new CustomException(ErrorCode.INTERNAL_SERVER_ERROR);
 		}
 	}

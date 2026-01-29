@@ -63,7 +63,7 @@ public class EventService {
 		// 3. Google Calendar API 호출
 		String eventId = googleCalendarService.createEvent(userId, mapping);
 
-		log.info("일정 추가 완료: userId={}, eventId={}", userId, eventId);
+		log.info("일정 추가 완료: userId={}", userId);
 		return EventCreateResponse.of(eventId);
 	}
 
@@ -155,7 +155,7 @@ public class EventService {
 		// 3. Google Calendar API 호출
 		String updatedEventId = googleCalendarService.updateEvent(userId, eventId, mapping);
 
-		log.info("일정 수정 완료: userId={}, eventId={}", userId, updatedEventId);
+		log.info("일정 수정 완료: userId={}", userId);
 		return EventCreateResponse.of(updatedEventId);
 	}
 
@@ -178,7 +178,7 @@ public class EventService {
 		// 2. Google Calendar API 호출
 		googleCalendarService.deleteEvent(userId, eventId);
 
-		log.info("일정 삭제 완료: userId={}, eventId={}", userId, eventId);
+		log.info("일정 삭제 완료: userId={}", userId);
 	}
 
 	/**
