@@ -10,9 +10,38 @@ env:
   JAVA_VERSION: "21"
 
 jobs:
+
+  # 0. main 브랜치 보호: release/hotfix/*만 PR 허용
+  main-branch-guard:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: main PR 브랜치 검증
+        run: |
+          BASE="${{ github.event.pull_request.base.ref }}"
+          HEAD="${{ github.event.pull_request.head.ref }}"
+
+          echo "📌 대상 브랜치: $BASE"
+          echo "📌 소스 브랜치: $HEAD"
+
+          # main이 아닐 땐 통과
+          if [ "$BASE" != "main" ]; then
+            echo "✅ 브랜치 정책 통과 (main 아님)"
+            exit 0
+          fi
+
+          # main일 때 허용 브랜치: release, hotfix/*
+          if [[ "$HEAD" =~ ^release$ || "$HEAD" =~ ^hotfix\/.+$ ]]; then
+            echo "✅ 브랜치 정책 통과 (허용된 소스 브랜치)"
+            exit 0
+          fi
+
+          echo "❌ 정책 위반: main에는 release 또는 hotfix/* 브랜치만 PR 가능"
+          exit 1
+  
+
   # Lint 설정
   lint:
-    name: lint
+    needs: [ main-branch-guard ]
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -43,7 +72,7 @@ jobs:
 
   # CodeQL 기반 코드 정적 분석 실행
   static_analysis:
-    name: static_analysis
+    needs: [ main-branch-guard ]
     runs-on: ubuntu-latest
     permissions:
       security-events: write
@@ -69,7 +98,7 @@ jobs:
         uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
-          config-file: "./.github/codeql/code-ql-light.yml"
+          config-file: "./.github/codeql/code-ql-heavy.yml"
 
       - name: Build (Gradle)
         run: |
@@ -117,7 +146,7 @@ jobs:
   notify-discord:
     name: notify
     runs-on: ubuntu-22.04
-    needs: [ lint, static_analysis ]
+    needs: [ main-branch-guard, lint, static_analysis ]
     if: always()
     steps:
       - name: 데이터 준비
@@ -125,6 +154,20 @@ jobs:
         env:
           USER_MAP: ${{ secrets.USER_MAP_JSON }}
         run: |
+          # 브랜치 가드 재평가 (main은 release/hotfix/*만 허용)
+          BASE="${{ github.event.pull_request.base.ref }}"
+          HEAD="${{ github.event.pull_request.head.ref }}"
+          if [ "$BASE" == "main" ] && [[ ! "$HEAD" =~ ^release$ && ! "$HEAD" =~ ^hotfix\/.+$ ]]; then
+            GUARD_ALLOWED=false
+            GUARD_REASON="main에는 release 또는 hotfix/* 브랜치만 PR 가능"
+          else
+            GUARD_ALLOWED=true
+            GUARD_REASON="정책 통과"
+          fi
+
+          echo "branch_guard_allowed=$GUARD_ALLOWED" >> $GITHUB_OUTPUT
+          echo "branch_guard_reason=$GUARD_REASON" >> $GITHUB_OUTPUT
+          
           # 1. 작성자 매핑
           LOGIN_ID="${{ github.event.pull_request.user.login }}"
           AUTHOR_TAG=$(echo "$USER_MAP" | jq -r --arg id "$LOGIN_ID" '.[$id] // $id')
@@ -158,23 +201,25 @@ jobs:
       - name: Discord 빌드 알림
         uses: sarisia/actions-status-discord@v1
         with:
-          status: ${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success') && 'success' || 'failure' }}
+          status: ${{ steps.prep.outputs.branch_guard_allowed == 'true' && needs.lint.result == 'success' && needs.static_analysis.result == 'success' && 'success' || 'failure' }}
           webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          title: "${{ github.event.pull_request.base.ref }} PR [${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success') && '✅성공' || '❌실패' }}]"
+          title: "${{ github.event.pull_request.base.ref }} BE PR [${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success') && '✅성공' || '❌실패' }}]"
           description: |
             **PR 제목**: ${{ github.event.pull_request.title }}
+            **브랜치 가드**: ${{ steps.prep.outputs.branch_guard_allowed == 'true' && '✅ 통과' || '❌ 차단' }} (이유: ${{ steps.prep.outputs.branch_guard_reason }})
             **작성자**: ${{ steps.prep.outputs.author }}
             **리뷰어**: ${{ steps.prep.outputs.reviewers }}
             **작업 내용**: ${{ steps.prep.outputs.description }}...
             **경로**: `${{ github.event.pull_request.head.ref }}` → `${{ github.event.pull_request.base.ref }}`
             
             **📊 상세 결과**:
-            - Lint: ${{ needs.lint.result == 'success' && '✅' || '❌' }}
-            - Static Analysis: ${{ needs.static_analysis.result == 'success' && '✅' || '❌' }}
+            - Branch Guard: ${{ steps.prep.outputs.branch_guard_allowed == 'true' && ' ✅' || ' ❌' }}
+            - Lint: ${{ steps.prep.outputs.branch_guard_allowed == 'true' && (needs.lint.result == 'success' && '✅' || '❌') || ' ⚪️ (브랜치 가드 차단)' }}
+            - Static Analysis: ${{ steps.prep.outputs.branch_guard_allowed == 'true' && (needs.static_analysis.result == 'success' && '✅' || '❌') || ' ⚪️ (브랜치 가드 차단)' }}
 
-            ${{ needs.static_analysis.result != 'success' && '⚠️ **정적 분석 실패로 인해 파이프라인이 중단되었습니다.**' || '' }}
+            ${{ steps.prep.outputs.branch_guard_allowed == 'true' && needs.static_analysis.result == 'failure' && '⚠️ **정적 분석 실패로 인해 파이프라인이 중단되었습니다.**' || '' }}
 
             **🔗 링크**: [PR 확인하기](${{ github.event.pull_request.html_url }})
-          color: "${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success') && 65280 || 16711680 }}"
+          color: "${{ steps.prep.outputs.branch_guard_allowed == 'true' && needs.lint.result == 'success' && needs.static_analysis.result == 'success' && 65280 || 16711680 }}"
           username: GitHub PR Bot
           avatar_url: https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
