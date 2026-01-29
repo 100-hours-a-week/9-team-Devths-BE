@@ -114,6 +114,7 @@ public class UserService {
 		socialAccountRepository.save(socialAccount);
 
 		List<UserInterest> interests = request.interests().stream()
+			.distinct()
 			.map(this::parseInterest)
 			.map(interest -> UserInterest.builder().user(user).interest(interest).build())
 			.collect(Collectors.toList());
@@ -197,20 +198,24 @@ public class UserService {
 		}
 
 		// interests가 전달된 경우 업데이트
-		if (request.interests() != null && !request.interests().isEmpty()) {
+		if (request.interests() != null) {
 			// 기존 UserInterest 삭제
 			userInterestRepository.deleteAllByUser_Id(userId);
+			userInterestRepository.flush();
 
-			// 새로운 UserInterest 생성 및 저장
-			List<UserInterest> newInterests = request.interests().stream()
-				.map(this::parseInterest)
-				.map(interest -> UserInterest.builder().user(user).interest(interest).build())
-				.collect(Collectors.toList());
+			// 빈 배열이 아닌 경우에만 새로운 관심사 추가
+			if (!request.interests().isEmpty()) {
+				List<UserInterest> newInterests = request.interests().stream()
+					.distinct()
+					.map(this::parseInterest)
+					.map(interest -> UserInterest.builder().user(user).interest(interest).build())
+					.collect(Collectors.toList());
 
-			try {
-				userInterestRepository.saveAll(newInterests);
-			} catch (DataIntegrityViolationException e) {
-				throw new CustomException(ErrorCode.INVALID_INPUT);
+				try {
+					userInterestRepository.saveAll(newInterests);
+				} catch (DataIntegrityViolationException e) {
+					throw new CustomException(ErrorCode.INVALID_INPUT);
+				}
 			}
 		}
 
