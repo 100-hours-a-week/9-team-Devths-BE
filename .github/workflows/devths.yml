@@ -130,15 +130,15 @@ jobs:
 
   # 추후 통합 테스트 과정 추가 예정
 
-  # S3 업로드 및 CodeDeploy 트리거
-  deploy:
-    name: deploy
+  # S3 업로드
+  s3-upload:
+    name: s3-upload
     runs-on: ubuntu-22.04
-    needs: [ lint, build_and_analyze ] # 테스트 통과 후 빌드 및 배포
+    needs: [ lint, build_and_analyze ] # 테스트 통과 후 빌드 및 S3 업로드
     if: success()
     outputs:
-      deployment_id: ${{ steps.codedeploy.outputs.deployment_id }}
       s3_key: ${{ steps.s3-upload.outputs.s3_key }}
+      version_name: ${{ steps.package.outputs.version_name }}
 
     steps:
       - name: 체크아웃
@@ -213,18 +213,35 @@ jobs:
           echo "s3_key=$S3_KEY" >> $GITHUB_OUTPUT
           echo "📂 S3 Key: $S3_KEY"
 
+  # CodeDeploy 트리거 (develop/release만)
+  codedeploy:
+    name: codedeploy
+    runs-on: ubuntu-22.04
+    needs: [ s3-upload ]
+    if: success() && github.ref_name != 'main' # 운영(main)은 제외하고, develop/release만 자동 배포
+    outputs:
+      deployment_id: ${{ steps.codedeploy.outputs.deployment_id }}
+
+    steps:
+      - name: AWS 자격 증명 설정
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{secrets.AWS_ACCESS_KEY}}
+          aws-secret-access-key: ${{secrets.AWS_SECRET_KEY}}
+          aws-region: ${{secrets.AWS_REGION}}
+
       - name: AWS CodeDeploy 배포 요청
         id: codedeploy
-        if: github.ref_name != 'main' # 운영(main)은 S3 업로드까지만 수행하고, 배포 트리거는 수동으로 진행
         run: |
-          VERSION_NAME="${{ steps.package.outputs.version_name }}"
-          
+          VERSION_NAME="${{ needs.s3-upload.outputs.version_name }}"
+          S3_KEY="${{ needs.s3-upload.outputs.s3_key }}"
+
           echo "🚀 CodeDeploy 배포 생성 요청..."
           aws deploy create-deployment \
             --application-name ${{ env.CODEDEPLOY_APPLICATION }} \
             --deployment-config-name CodeDeployDefault.AllAtOnce \
             --deployment-group-name ${{ env.CODE_DEPLOY_GROUP_NAME }} \
-            --s3-location bucket=${S3_BUCKET},bundleType=zip,key=${S3_PREFIX}/$VERSION_NAME.zip \
+            --s3-location bucket=${S3_BUCKET},bundleType=zip,key=$S3_KEY \
             --description "Deployed via GitHub Actions: $VERSION_NAME" \
             --output json > deployment_output.json
 
@@ -235,11 +252,11 @@ jobs:
 
           echo "🚀 Deployment ID: $DEPLOYMENT_ID"
 
-  # CI 단계 Discord 알림 (Build & Upload)
+  # CI 단계 Discord 알림 (Build & S3 Upload)
   notify-ci:
     name: notify-ci
     runs-on: ubuntu-22.04
-    needs: [ lint, build_and_analyze ]
+    needs: [ lint, build_and_analyze, s3-upload ]
     if: always()
     steps:
       - name: 데이터 준비
@@ -257,34 +274,34 @@ jobs:
       - name: Discord 빌드 알림
         uses: sarisia/actions-status-discord@v1
         with:
-          status: ${{ (needs.lint.result == 'success' && needs.build_and_analyze.result == 'success' && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped')) && 'success' || 'failure' }}
+          status: ${{ (needs.lint.result == 'success' && needs.build_and_analyze.result == 'success' && needs.s3-upload.result == 'success') && 'success' || 'failure' }}
           # 타겟 브랜치에 따른 웹훅 분기
           webhook: ${{ github.ref_name == 'main' && secrets.DISCORD_WEBHOOK_PROD_URL || secrets.DISCORD_WEBHOOK_NON_PROD_URL }}
-          title: "배포(CI) 결과 [${{ (needs.lint.result == 'success' && needs.build_and_analyze.result == 'success' && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped')) && '✅성공' || '❌실패' }}]"
+          title: "배포(CI) 결과 [${{ (needs.lint.result == 'success' && needs.build_and_analyze.result == 'success' && needs.s3-upload.result == 'success') && '✅성공' || '❌실패' }}]"
           description: |
             **커밋 메시지**: ${{ steps.prep.outputs.title }}
             **브랜치**: `${{ steps.prep.outputs.branch }}`
             **환경**: ${{ github.ref_name == 'main' && '🚀 운영(PROD)' || (github.ref_name == 'release' && '🧪 스테이징(STAGING)' || '🛠️ 개발(DEV)') }}
-            
+
             **📊 상세 결과**:
             - Lint: ${{ needs.lint.result == 'success' && '✅' || '❌' }}
             - Static Analysis: ${{ needs.build_and_analyze.result == 'success' && '✅' || '❌' }}
-            - Deployment: ${{ needs.deploy.result == 'success' && '✅' || (needs.deploy.result == 'skipped' && '⏭️' || '❌') }}
+            - S3 Upload: ${{ needs.s3-upload.result == 'success' && '✅' || '❌' }}
 
             ${{ needs.build_and_analyze.result != 'success' && '⚠️ **정적 분석 실패로 인해 빌드가 중단되었습니다.**' || '' }}
-            **📂 S3 Key**: `${{needs.deploy.outputs.s3_key}}`
+            **📂 S3 Key**: `${{ needs.s3-upload.outputs.s3_key }}`
             **🔗 링크**: [커밋 확인하기](${{ github.event.repository.html_url }}/commit/${{ github.sha }})
 
-          color: "${{ (needs.lint.result == 'success' && needs.build_and_analyze.result == 'success' && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped')) && 65280 || 16711680 }}"
+          color: "${{ (needs.lint.result == 'success' && needs.build_and_analyze.result == 'success' && needs.s3-upload.result == 'success') && 65280 || 16711680 }}"
           username: GitHub Merge Bot
           avatar_url: https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
 
-  # CD 단계 알림 (CodeDeploy Result) - 운영(main) 제외
+  # CD 단계 알림 (CodeDeploy Result) - develop/release만
   notify-cd:
     name: notify-cd
     runs-on: ubuntu-22.04
-    needs: [ deploy ]
-    if: needs.deploy.result == 'success' && github.ref_name != 'main'
+    needs: [ codedeploy ]
+    if: always() && github.ref_name != 'main'
     steps:
       - name: AWS 자격 증명 설정
         uses: aws-actions/configure-aws-credentials@v4
@@ -296,7 +313,7 @@ jobs:
       - name: CodeDeploy 완료 대기 및 결과 조회
         id: cd-check
         run: |
-          DEPLOYMENT_ID="${{ needs.deploy.outputs.deployment_id }}"
+          DEPLOYMENT_ID="${{ needs.codedeploy.outputs.deployment_id }}"
           echo "⏳ Waiting for CodeDeploy ($DEPLOYMENT_ID)..."
           
           # 배포 완료 대기
@@ -347,7 +364,7 @@ jobs:
           title: "배포(CD) 결과 [${{ steps.cd-check.outputs.status == 'Succeeded' && '✅성공' || '❌실패' }}]"
           description: |
             **브랜치**: `${{ github.ref_name }}`
-            **CodeDeploy ID**: `${{ needs.deploy.outputs.deployment_id }}`
+            **CodeDeploy ID**: `${{ needs.codedeploy.outputs.deployment_id }}`
             
             **📊 배포 상태**: ${{ steps.cd-check.outputs.status }}
             
