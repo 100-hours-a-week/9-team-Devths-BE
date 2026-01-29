@@ -1,6 +1,7 @@
 package com.ktb3.devths.ai.chatbot.dto.request;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.ktb3.devths.ai.chatbot.domain.constant.MessageType;
 
 public record FastApiChatContext(
 	String mode,
@@ -19,7 +20,7 @@ public record FastApiChatContext(
 ) {
 	public static FastApiChatContext createNormalMode() {
 		return new FastApiChatContext(
-			"NORMAL",
+			MessageType.NORMAL.name().toLowerCase(),
 			null,
 			null,
 			null,
