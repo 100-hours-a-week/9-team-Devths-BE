@@ -11,6 +11,7 @@ import com.ktb3.devths.notification.domain.constant.NotificationCategory;
 import com.ktb3.devths.notification.domain.constant.NotificationType;
 import com.ktb3.devths.notification.domain.entity.Notification;
 import com.ktb3.devths.notification.dto.response.NotificationListResponse;
+import com.ktb3.devths.notification.dto.response.UnreadCountResponse;
 import com.ktb3.devths.notification.repository.NotificationRepository;
 import com.ktb3.devths.user.domain.entity.User;
 
@@ -66,5 +67,11 @@ public class NotificationService {
 		}
 
 		return NotificationListResponse.of(notifications, pageSize);
+	}
+
+	@Transactional(readOnly = true)
+	public UnreadCountResponse getUnreadCount(Long userId) {
+		Long count = notificationRepository.countUnreadByRecipientId(userId);
+		return UnreadCountResponse.of(count);
 	}
 }

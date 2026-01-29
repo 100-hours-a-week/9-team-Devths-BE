@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.ktb3.devths.global.response.ApiResponse;
 import com.ktb3.devths.global.security.UserPrincipal;
 import com.ktb3.devths.notification.dto.response.NotificationListResponse;
+import com.ktb3.devths.notification.dto.response.UnreadCountResponse;
 import com.ktb3.devths.notification.service.NotificationService;
 
 import lombok.RequiredArgsConstructor;
@@ -35,6 +36,19 @@ public class NotificationController {
 
 		return ResponseEntity.ok(
 			ApiResponse.success("알림 목록을 성공적으로 조회하였습니다.", response)
+		);
+	}
+
+	@GetMapping("/unread")
+	public ResponseEntity<ApiResponse<UnreadCountResponse>> getUnreadCount(
+		@AuthenticationPrincipal UserPrincipal userPrincipal
+	) {
+		UnreadCountResponse response = notificationService.getUnreadCount(
+			userPrincipal.getUserId()
+		);
+
+		return ResponseEntity.ok(
+			ApiResponse.success("안 읽은 알림 개수를 성공적으로 조회하였습니다.", response)
 		);
 	}
 }
