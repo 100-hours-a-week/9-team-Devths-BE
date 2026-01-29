@@ -10,11 +10,11 @@ import org.springframework.transaction.annotation.Transactional;
 import com.ktb3.devths.calendar.domain.constant.InterviewStage;
 import com.ktb3.devths.calendar.domain.constant.NotificationUnit;
 import com.ktb3.devths.calendar.dto.internal.GoogleEventMapping;
-import com.ktb3.devths.calendar.dto.request.EventCreateRequest;
-import com.ktb3.devths.calendar.dto.request.EventUpdateRequest;
-import com.ktb3.devths.calendar.dto.response.EventCreateResponse;
-import com.ktb3.devths.calendar.dto.response.EventDetailResponse;
-import com.ktb3.devths.calendar.dto.response.EventListResponse;
+import com.ktb3.devths.calendar.dto.request.GoogleEventCreateRequest;
+import com.ktb3.devths.calendar.dto.request.GoogleEventUpdateRequest;
+import com.ktb3.devths.calendar.dto.response.GoogleEventCreateResponse;
+import com.ktb3.devths.calendar.dto.response.GoogleEventDetailResponse;
+import com.ktb3.devths.calendar.dto.response.GoogleEventListResponse;
 import com.ktb3.devths.global.exception.CustomException;
 import com.ktb3.devths.global.response.ErrorCode;
 import com.ktb3.devths.user.domain.entity.User;
@@ -26,7 +26,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class EventService {
+public class CalendarService {
 
 	private final GoogleCalendarService googleCalendarService;
 	private final UserRepository userRepository;
@@ -39,7 +39,7 @@ public class EventService {
 	 * @return 일정 추가 응답 (Google Calendar Event ID)
 	 */
 	@Transactional
-	public EventCreateResponse createEvent(Long userId, EventCreateRequest request) {
+	public GoogleEventCreateResponse createEvent(Long userId, GoogleEventCreateRequest request) {
 		// 1. 사용자 조회 및 검증
 		User user = userRepository.findById(userId)
 			.orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
@@ -64,7 +64,7 @@ public class EventService {
 		String eventId = googleCalendarService.createEvent(userId, mapping);
 
 		log.info("일정 추가 완료: userId={}", userId);
-		return EventCreateResponse.of(eventId);
+		return GoogleEventCreateResponse.of(eventId);
 	}
 
 	/**
@@ -78,7 +78,7 @@ public class EventService {
 	 * @return 일정 목록
 	 */
 	@Transactional(readOnly = true)
-	public List<EventListResponse> listEvents(
+	public List<GoogleEventListResponse> listEvents(
 		Long userId,
 		LocalDate startDate,
 		LocalDate endDate,
@@ -109,7 +109,7 @@ public class EventService {
 	 * @return 일정 상세 정보
 	 */
 	@Transactional(readOnly = true)
-	public EventDetailResponse getEvent(Long userId, String eventId) {
+	public GoogleEventDetailResponse getEvent(Long userId, String eventId) {
 		// 1. 사용자 조회 및 검증
 		User user = userRepository.findById(userId)
 			.orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
@@ -131,7 +131,7 @@ public class EventService {
 	 * @return 일정 수정 응답 (Google Calendar Event ID)
 	 */
 	@Transactional
-	public EventCreateResponse updateEvent(Long userId, String eventId, EventUpdateRequest request) {
+	public GoogleEventCreateResponse updateEvent(Long userId, String eventId, GoogleEventUpdateRequest request) {
 		// 1. 사용자 조회 및 검증
 		User user = userRepository.findById(userId)
 			.orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
@@ -156,7 +156,7 @@ public class EventService {
 		String updatedEventId = googleCalendarService.updateEvent(userId, eventId, mapping);
 
 		log.info("일정 수정 완료: userId={}", userId);
-		return EventCreateResponse.of(updatedEventId);
+		return GoogleEventCreateResponse.of(updatedEventId);
 	}
 
 	/**

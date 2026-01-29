@@ -5,7 +5,7 @@ import java.util.List;
 
 import com.ktb3.devths.calendar.domain.constant.InterviewStage;
 
-public record EventListResponse(
+public record GoogleEventListResponse(
 	String eventId,
 	String title,
 	LocalDateTime startTime,
@@ -13,7 +13,7 @@ public record EventListResponse(
 	InterviewStage stage,
 	List<String> tags
 ) {
-	public static EventListResponse of(
+	public static GoogleEventListResponse of(
 		String eventId,
 		String title,
 		LocalDateTime startTime,
@@ -21,6 +21,6 @@ public record EventListResponse(
 		InterviewStage stage,
 		List<String> tags
 	) {
-		return new EventListResponse(eventId, title, startTime, endTime, stage, tags);
+		return new GoogleEventListResponse(eventId, title, startTime, endTime, stage, tags);
 	}
 }

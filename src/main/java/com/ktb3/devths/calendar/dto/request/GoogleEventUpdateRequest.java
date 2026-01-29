@@ -10,7 +10,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
-public record EventCreateRequest(
+public record GoogleEventUpdateRequest(
 	@NotNull(message = "stage는 필수입니다")
 	InterviewStage stage,
 
@@ -37,7 +37,7 @@ public record EventCreateRequest(
 	@NotNull(message = "notificationUnit은 필수입니다")
 	NotificationUnit notificationUnit
 ) {
-	public EventCreateRequest {
+	public GoogleEventUpdateRequest {
 		if (startTime != null && endTime != null && !startTime.isBefore(endTime)) {
 			throw new IllegalArgumentException("endTime은 startTime보다 이후여야 합니다");
 		}

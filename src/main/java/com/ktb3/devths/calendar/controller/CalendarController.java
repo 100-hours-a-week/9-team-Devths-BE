@@ -18,12 +18,12 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ktb3.devths.calendar.domain.constant.InterviewStage;
-import com.ktb3.devths.calendar.dto.request.EventCreateRequest;
-import com.ktb3.devths.calendar.dto.request.EventUpdateRequest;
-import com.ktb3.devths.calendar.dto.response.EventCreateResponse;
-import com.ktb3.devths.calendar.dto.response.EventDetailResponse;
-import com.ktb3.devths.calendar.dto.response.EventListResponse;
-import com.ktb3.devths.calendar.service.EventService;
+import com.ktb3.devths.calendar.dto.request.GoogleEventCreateRequest;
+import com.ktb3.devths.calendar.dto.request.GoogleEventUpdateRequest;
+import com.ktb3.devths.calendar.dto.response.GoogleEventCreateResponse;
+import com.ktb3.devths.calendar.dto.response.GoogleEventDetailResponse;
+import com.ktb3.devths.calendar.dto.response.GoogleEventListResponse;
+import com.ktb3.devths.calendar.service.CalendarService;
 import com.ktb3.devths.global.response.ApiResponse;
 import com.ktb3.devths.global.security.UserPrincipal;
 
@@ -31,11 +31,11 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 @RestController
-@RequestMapping("/api/events")
+@RequestMapping("/api/calendars")
 @RequiredArgsConstructor
-public class EventController {
+public class CalendarController {
 
-	private final EventService eventService;
+	private final CalendarService calendarService;
 
 	/**
 	 * Google Calendar 일정 추가
@@ -46,11 +46,11 @@ public class EventController {
 	 */
 	@PostMapping
 	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201")
-	public ResponseEntity<ApiResponse<EventCreateResponse>> createEvent(
+	public ResponseEntity<ApiResponse<GoogleEventCreateResponse>> createEvent(
 		@AuthenticationPrincipal UserPrincipal userPrincipal,
-		@Valid @RequestBody EventCreateRequest request
+		@Valid @RequestBody GoogleEventCreateRequest request
 	) {
-		EventCreateResponse response = eventService.createEvent(userPrincipal.getUserId(), request);
+		GoogleEventCreateResponse response = calendarService.createEvent(userPrincipal.getUserId(), request);
 
 		return ResponseEntity
 			.status(HttpStatus.CREATED)
@@ -68,14 +68,14 @@ public class EventController {
 	 * @return 일정 목록
 	 */
 	@GetMapping
-	public ResponseEntity<ApiResponse<List<EventListResponse>>> listEvents(
+	public ResponseEntity<ApiResponse<List<GoogleEventListResponse>>> listEvents(
 		@AuthenticationPrincipal UserPrincipal userPrincipal,
 		@RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate startDate,
 		@RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate endDate,
 		@RequestParam(required = false) InterviewStage stage,
 		@RequestParam(required = false) String tag
 	) {
-		List<EventListResponse> response = eventService.listEvents(
+		List<GoogleEventListResponse> response = calendarService.listEvents(
 			userPrincipal.getUserId(),
 			startDate,
 			endDate,
@@ -95,11 +95,11 @@ public class EventController {
 	 * @return 일정 상세 정보
 	 */
 	@GetMapping("/{eventId}")
-	public ResponseEntity<ApiResponse<EventDetailResponse>> getEvent(
+	public ResponseEntity<ApiResponse<GoogleEventDetailResponse>> getEvent(
 		@AuthenticationPrincipal UserPrincipal userPrincipal,
 		@PathVariable String eventId
 	) {
-		EventDetailResponse response = eventService.getEvent(userPrincipal.getUserId(), eventId);
+		GoogleEventDetailResponse response = calendarService.getEvent(userPrincipal.getUserId(), eventId);
 
 		return ResponseEntity
 			.ok(ApiResponse.success("일정 상세 정보를 성공적으로 조회하였습니다.", response));
@@ -114,12 +114,12 @@ public class EventController {
 	 * @return 일정 수정 응답
 	 */
 	@PutMapping("/{eventId}")
-	public ResponseEntity<ApiResponse<EventCreateResponse>> updateEvent(
+	public ResponseEntity<ApiResponse<GoogleEventCreateResponse>> updateEvent(
 		@AuthenticationPrincipal UserPrincipal userPrincipal,
 		@PathVariable String eventId,
-		@Valid @RequestBody EventUpdateRequest request
+		@Valid @RequestBody GoogleEventUpdateRequest request
 	) {
-		EventCreateResponse response = eventService.updateEvent(
+		GoogleEventCreateResponse response = calendarService.updateEvent(
 			userPrincipal.getUserId(),
 			eventId,
 			request
@@ -142,7 +142,7 @@ public class EventController {
 		@AuthenticationPrincipal UserPrincipal userPrincipal,
 		@PathVariable String eventId
 	) {
-		eventService.deleteEvent(userPrincipal.getUserId(), eventId);
+		calendarService.deleteEvent(userPrincipal.getUserId(), eventId);
 
 		return ResponseEntity.noContent().build();
 	}

@@ -33,8 +33,8 @@ import com.ktb3.devths.auth.service.TokenEncryptionService;
 import com.ktb3.devths.calendar.domain.constant.InterviewStage;
 import com.ktb3.devths.calendar.domain.constant.NotificationUnit;
 import com.ktb3.devths.calendar.dto.internal.GoogleEventMapping;
-import com.ktb3.devths.calendar.dto.response.EventDetailResponse;
-import com.ktb3.devths.calendar.dto.response.EventListResponse;
+import com.ktb3.devths.calendar.dto.response.GoogleEventDetailResponse;
+import com.ktb3.devths.calendar.dto.response.GoogleEventListResponse;
 import com.ktb3.devths.global.exception.CustomException;
 import com.ktb3.devths.global.response.ErrorCode;
 import com.ktb3.devths.user.domain.entity.SocialAccount;
@@ -105,7 +105,7 @@ public class GoogleCalendarService {
 	 * @return 일정 목록
 	 */
 	@Transactional(readOnly = true)
-	public List<EventListResponse> listEvents(
+	public List<GoogleEventListResponse> listEvents(
 		Long userId,
 		LocalDateTime startDate,
 		LocalDateTime endDate,
@@ -166,7 +166,7 @@ public class GoogleCalendarService {
 	 * @return 일정 상세 정보
 	 */
 	@Transactional(readOnly = true)
-	public EventDetailResponse getEvent(Long userId, String eventId) {
+	public GoogleEventDetailResponse getEvent(Long userId, String eventId) {
 		try {
 			// 1. SocialAccount 조회
 			SocialAccount socialAccount = socialAccountRepository.findByUser_IdAndProvider(userId, "GOOGLE")
@@ -335,7 +335,7 @@ public class GoogleCalendarService {
 	/**
 	 * Google Event를 EventListResponse로 변환
 	 */
-	private EventListResponse convertToEventListResponse(Event event) {
+	private GoogleEventListResponse convertToEventListResponse(Event event) {
 		try {
 			LocalDateTime startTime = convertToLocalDateTime(event.getStart().getDateTime());
 			LocalDateTime endTime = convertToLocalDateTime(event.getEnd().getDateTime());
@@ -346,7 +346,7 @@ public class GoogleCalendarService {
 			String tagsJson = (String)event.getExtendedProperties().getPrivate().get("tags");
 			List<String> tags = objectMapper.readValue(tagsJson, List.class);
 
-			return EventListResponse.of(
+			return GoogleEventListResponse.of(
 				event.getId(),
 				event.getSummary(),
 				startTime,
@@ -373,7 +373,7 @@ public class GoogleCalendarService {
 	/**
 	 * Google Event를 EventDetailResponse로 변환
 	 */
-	private EventDetailResponse convertToEventDetailResponse(Event event) {
+	private GoogleEventDetailResponse convertToEventDetailResponse(Event event) {
 		try {
 			LocalDateTime startTime = convertToLocalDateTime(event.getStart().getDateTime());
 			LocalDateTime endTime = convertToLocalDateTime(event.getEnd().getDateTime());
@@ -409,7 +409,7 @@ public class GoogleCalendarService {
 			LocalDateTime createdAt = convertToLocalDateTime(event.getCreated());
 			LocalDateTime updatedAt = convertToLocalDateTime(event.getUpdated());
 
-			return EventDetailResponse.of(
+			return GoogleEventDetailResponse.of(
 				event.getId(),
 				stage,
 				event.getSummary(),
