@@ -37,6 +37,10 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation "io.micrometer:micrometer-registry-cloudwatch2"
 
+    // Google Calendar API
+    implementation 'com.google.apis:google-api-services-calendar:v3-rev20250404-2.0.0'
+    implementation 'com.google.api-client:google-api-client:2.8.0'
+
     implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
