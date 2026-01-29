@@ -114,7 +114,7 @@ public class AsyncAnalysisProcessor {
 			fileType = attachment.getMimeType();
 		}
 
-		String publicUrl = s3StorageService.getPublicUrl(s3Key);
+		String publicUrl = (s3Key != null) ? s3StorageService.getPublicUrl(s3Key) : null;
 
 		return new FastApiAnalysisRequest.FastApiDocumentInfo(
 			fileId,
