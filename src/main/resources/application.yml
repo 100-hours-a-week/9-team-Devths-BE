@@ -4,6 +4,11 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${MAXIMUM_POOL_SIZE}
+      minimum-idle: ${MINIMUM_IDLE}
+      connection-timeout: ${CONNECTION_TIMEOUT}
+      idle-timeout: ${IDLE_TIMEOUT}
 
   jpa:
     hibernate:
@@ -78,10 +83,10 @@ fastapi:
   base-url: ${FASTAPI_BASE_URL}
   timeout: 30000
   poll-interval: 2000
-  max-poll-attempts: 150
+  max-poll-attempts: 50
 
 async:
-  core-pool-size: 5
-  max-pool-size: 10
+  core-pool-size: 10
+  max-pool-size: 20
   queue-capacity: 100
   thread-name-prefix: "async-analysis-"
