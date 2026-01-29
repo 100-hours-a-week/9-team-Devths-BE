@@ -6,7 +6,7 @@ import java.util.List;
 import com.ktb3.devths.calendar.domain.constant.InterviewStage;
 import com.ktb3.devths.calendar.domain.constant.NotificationUnit;
 
-public record EventDetailResponse(
+public record GoogleEventDetailResponse(
 	String eventId,
 	InterviewStage stage,
 	String title,
@@ -20,7 +20,7 @@ public record EventDetailResponse(
 	LocalDateTime createdAt,
 	LocalDateTime updatedAt
 ) {
-	public static EventDetailResponse of(
+	public static GoogleEventDetailResponse of(
 		String eventId,
 		InterviewStage stage,
 		String title,
@@ -34,7 +34,7 @@ public record EventDetailResponse(
 		LocalDateTime createdAt,
 		LocalDateTime updatedAt
 	) {
-		return new EventDetailResponse(
+		return new GoogleEventDetailResponse(
 			eventId, stage, title, company, startTime, endTime,
 			description, notificationTime, notificationUnit, tags,
 			createdAt, updatedAt
