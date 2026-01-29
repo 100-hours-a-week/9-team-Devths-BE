@@ -2,10 +2,12 @@ package com.ktb3.devths.calendar.service;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
+import com.google.api.client.googleapis.json.GoogleJsonResponseException;
 import com.google.api.client.http.HttpTransport;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.gson.GsonFactory;
@@ -28,7 +31,9 @@ import com.ktb3.devths.auth.dto.internal.GoogleTokenResponse;
 import com.ktb3.devths.auth.service.GoogleOAuthService;
 import com.ktb3.devths.auth.service.TokenEncryptionService;
 import com.ktb3.devths.calendar.domain.constant.InterviewStage;
+import com.ktb3.devths.calendar.domain.constant.NotificationUnit;
 import com.ktb3.devths.calendar.dto.internal.GoogleEventMapping;
+import com.ktb3.devths.calendar.dto.response.EventDetailResponse;
 import com.ktb3.devths.calendar.dto.response.EventListResponse;
 import com.ktb3.devths.global.exception.CustomException;
 import com.ktb3.devths.global.response.ErrorCode;
@@ -154,6 +159,55 @@ public class GoogleCalendarService {
 	}
 
 	/**
+	 * Google Calendar 일정 상세 조회
+	 *
+	 * @param userId 사용자 ID
+	 * @param eventId Google Calendar Event ID
+	 * @return 일정 상세 정보
+	 */
+	@Transactional(readOnly = true)
+	public EventDetailResponse getEvent(Long userId, String eventId) {
+		try {
+			// 1. SocialAccount 조회
+			SocialAccount socialAccount = socialAccountRepository.findByUser_IdAndProvider(userId, "GOOGLE")
+				.orElseThrow(() -> new CustomException(ErrorCode.UNAUTHORIZED));
+
+			// 2. 토큰 만료 체크 및 갱신
+			refreshAccessTokenIfExpired(socialAccount);
+
+			// 3. Google Calendar 클라이언트 생성
+			Calendar calendarService = buildCalendarClient(socialAccount);
+
+			// 4. Google Calendar API 호출
+			Event event = calendarService.events()
+				.get("primary", eventId)
+				.execute();
+
+			// 5. Devths 일정인지 확인
+			if (event.getExtendedProperties() == null
+				|| event.getExtendedProperties().getPrivate() == null
+				|| !"devths".equals(event.getExtendedProperties().getPrivate().get("source"))) {
+				throw new CustomException(ErrorCode.EVENT_ACCESS_DENIED);
+			}
+
+			// 6. 응답 변환
+			return convertToEventDetailResponse(event);
+
+		} catch (CustomException e) {
+			throw e;
+		} catch (GoogleJsonResponseException e) {
+			if (e.getStatusCode() == 404) {
+				throw new CustomException(ErrorCode.EVENT_NOT_FOUND);
+			}
+			log.error("Google Calendar 일정 상세 조회 실패: userId={}, eventId={}", userId, eventId, e);
+			throw new CustomException(ErrorCode.GOOGLE_CALENDAR_CREATE_FAILED);
+		} catch (Exception e) {
+			log.error("Google Calendar 일정 상세 조회 실패: userId={}, eventId={}", userId, eventId, e);
+			throw new CustomException(ErrorCode.GOOGLE_CALENDAR_CREATE_FAILED);
+		}
+	}
+
+	/**
 	 * tag 필터 매칭 (백엔드에서 처리)
 	 */
 	private boolean matchesTagFilter(Event event, String tag) {
@@ -203,9 +257,68 @@ public class GoogleCalendarService {
 	 */
 	private LocalDateTime convertToLocalDateTime(DateTime dateTime) {
 		return LocalDateTime.ofInstant(
-			java.time.Instant.ofEpochMilli(dateTime.getValue()),
+			Instant.ofEpochMilli(dateTime.getValue()),
 			ZoneId.of(TIMEZONE)
 		);
+	}
+
+	/**
+	 * Google Event를 EventDetailResponse로 변환
+	 */
+	private EventDetailResponse convertToEventDetailResponse(Event event) {
+		try {
+			LocalDateTime startTime = convertToLocalDateTime(event.getStart().getDateTime());
+			LocalDateTime endTime = convertToLocalDateTime(event.getEnd().getDateTime());
+
+			String stageStr = (String)event.getExtendedProperties().getPrivate().get("stage");
+			InterviewStage stage = InterviewStage.valueOf(stageStr);
+
+			String company = (String)event.getExtendedProperties().getPrivate().get("company");
+
+			String tagsJson = (String)event.getExtendedProperties().getPrivate().get("tags");
+			List<String> tags = objectMapper.readValue(tagsJson, List.class);
+
+			// reminders에서 notificationTime/Unit 역변환
+			Integer notificationMinutes = null;
+			if (event.getReminders() != null && event.getReminders().getOverrides() != null
+				&& !event.getReminders().getOverrides().isEmpty()) {
+				notificationMinutes = event.getReminders().getOverrides().get(0).getMinutes();
+			}
+
+			NotificationUnit notificationUnit = NotificationUnit.MINUTE;
+			Integer notificationTime = notificationMinutes;
+
+			if (notificationMinutes != null) {
+				if (notificationMinutes % 1440 == 0) {
+					notificationTime = notificationMinutes / 1440;
+					notificationUnit = NotificationUnit.DAY;
+				} else if (notificationMinutes % 60 == 0) {
+					notificationTime = notificationMinutes / 60;
+					notificationUnit = NotificationUnit.HOUR;
+				}
+			}
+
+			LocalDateTime createdAt = convertToLocalDateTime(event.getCreated());
+			LocalDateTime updatedAt = convertToLocalDateTime(event.getUpdated());
+
+			return EventDetailResponse.of(
+				event.getId(),
+				stage,
+				event.getSummary(),
+				company,
+				startTime,
+				endTime,
+				event.getDescription(),
+				notificationTime,
+				notificationUnit,
+				tags,
+				createdAt,
+				updatedAt
+			);
+		} catch (Exception e) {
+			log.error("Event 상세 변환 실패: eventId={}", event.getId(), e);
+			throw new CustomException(ErrorCode.INTERNAL_SERVER_ERROR);
+		}
 	}
 
 	/**
@@ -275,7 +388,7 @@ public class GoogleCalendarService {
 
 		// ExtendedProperties 설정
 		Event.ExtendedProperties extendedProperties = new Event.ExtendedProperties();
-		extendedProperties.setPrivate(java.util.Map.of(
+		extendedProperties.setPrivate(Map.of(
 			"stage", mapping.stage().name(),
 			"company", mapping.company(),
 			"tags", mapping.tags() != null ? objectMapper.writeValueAsString(mapping.tags()) : "[]",

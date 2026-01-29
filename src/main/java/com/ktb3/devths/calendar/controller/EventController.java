@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.ktb3.devths.calendar.domain.constant.InterviewStage;
 import com.ktb3.devths.calendar.dto.request.EventCreateRequest;
 import com.ktb3.devths.calendar.dto.response.EventCreateResponse;
+import com.ktb3.devths.calendar.dto.response.EventDetailResponse;
 import com.ktb3.devths.calendar.dto.response.EventListResponse;
 import com.ktb3.devths.calendar.service.EventService;
 import com.ktb3.devths.global.response.ApiResponse;
@@ -79,5 +81,23 @@ public class EventController {
 
 		return ResponseEntity
 			.ok(ApiResponse.success("일정 목록을 성공적으로 조회하였습니다.", response));
+	}
+
+	/**
+	 * Google Calendar 일정 상세 조회
+	 *
+	 * @param userPrincipal 인증된 사용자
+	 * @param eventId Google Calendar Event ID
+	 * @return 일정 상세 정보
+	 */
+	@GetMapping("/{eventId}")
+	public ResponseEntity<ApiResponse<EventDetailResponse>> getEvent(
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		@PathVariable String eventId
+	) {
+		EventDetailResponse response = eventService.getEvent(userPrincipal.getUserId(), eventId);
+
+		return ResponseEntity
+			.ok(ApiResponse.success("일정 상세 정보를 성공적으로 조회하였습니다.", response));
 	}
 }

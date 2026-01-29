@@ -1,14 +1,18 @@
 package com.ktb3.devths.calendar.service;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ktb3.devths.calendar.domain.constant.InterviewStage;
 import com.ktb3.devths.calendar.domain.constant.NotificationUnit;
 import com.ktb3.devths.calendar.dto.internal.GoogleEventMapping;
 import com.ktb3.devths.calendar.dto.request.EventCreateRequest;
 import com.ktb3.devths.calendar.dto.response.EventCreateResponse;
+import com.ktb3.devths.calendar.dto.response.EventDetailResponse;
 import com.ktb3.devths.calendar.dto.response.EventListResponse;
 import com.ktb3.devths.global.exception.CustomException;
 import com.ktb3.devths.global.response.ErrorCode;
@@ -75,9 +79,9 @@ public class EventService {
 	@Transactional(readOnly = true)
 	public List<EventListResponse> listEvents(
 		Long userId,
-		java.time.LocalDate startDate,
-		java.time.LocalDate endDate,
-		com.ktb3.devths.calendar.domain.constant.InterviewStage stage,
+		LocalDate startDate,
+		LocalDate endDate,
+		InterviewStage stage,
 		String tag
 	) {
 		// 1. 사용자 조회 및 검증
@@ -89,11 +93,32 @@ public class EventService {
 		}
 
 		// 2. 날짜 범위를 LocalDateTime으로 변환 (Asia/Seoul 기준)
-		java.time.LocalDateTime startDateTime = startDate.atStartOfDay();
-		java.time.LocalDateTime endDateTime = endDate.atTime(23, 59, 59);
+		LocalDateTime startDateTime = startDate.atStartOfDay();
+		LocalDateTime endDateTime = endDate.atTime(23, 59, 59);
 
 		// 3. Google Calendar API 호출
 		return googleCalendarService.listEvents(userId, startDateTime, endDateTime, stage, tag);
+	}
+
+	/**
+	 * Google Calendar 일정 상세 조회
+	 *
+	 * @param userId 사용자 ID
+	 * @param eventId Google Calendar Event ID
+	 * @return 일정 상세 정보
+	 */
+	@Transactional(readOnly = true)
+	public EventDetailResponse getEvent(Long userId, String eventId) {
+		// 1. 사용자 조회 및 검증
+		User user = userRepository.findById(userId)
+			.orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+		if (user.isWithdraw()) {
+			throw new CustomException(ErrorCode.WITHDRAWN_USER);
+		}
+
+		// 2. Google Calendar API 호출
+		return googleCalendarService.getEvent(userId, eventId);
 	}
 
 	/**
