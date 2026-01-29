@@ -6,8 +6,6 @@ import java.util.Map;
 
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 
 import com.ktb3.devths.ai.analysis.dto.request.DocumentAnalysisRequest;
 import com.ktb3.devths.ai.analysis.dto.request.FastApiAnalysisRequest;
@@ -46,20 +44,24 @@ public class AsyncAnalysisProcessor {
 	private final S3StorageService s3StorageService;
 
 	@Async("taskExecutor")
-	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public void processAnalysis(Long taskId, Long userId, Long roomId, DocumentAnalysisRequest request) {
 		try {
 			String threadName = Thread.currentThread().getName();
 			log.info("비동기 분석 처리 시작: taskId={}, roomId={}, thread={}", taskId, roomId, threadName);
 
+			// 1. 상태 업데이트 (독립 트랜잭션)
 			asyncTaskService.updateStatus(taskId, TaskStatus.PROCESSING);
 
+			// 2. FastAPI 요청 준비 (트랜잭션 불필요 - Fetch Join으로 User 이미 로딩됨)
 			FastApiAnalysisRequest fastApiRequest = buildFastApiRequest(taskId, userId, roomId, request);
 
+			// 3. FastAPI 분석 요청 (트랜잭션 없음)
 			FastApiAnalysisResponse analysisResponse = fastApiClient.requestAnalysis(fastApiRequest);
 
+			// 4. 폴링 (트랜잭션 없음)
 			FastApiTaskStatusResponse statusResponse = pollFastApiTask(taskId);
 
+			// 5. 성공/실패 처리 (독립 트랜잭션)
 			if ("completed".equalsIgnoreCase(statusResponse.status())) {
 				handleAnalysisSuccess(taskId, roomId, statusResponse);
 			} else {
@@ -101,7 +103,7 @@ public class AsyncAnalysisProcessor {
 		Long fileId = documentInfo.fileId();
 
 		if (fileId != null) {
-			S3Attachment attachment = s3AttachmentRepository.findById(fileId)
+			S3Attachment attachment = s3AttachmentRepository.findByIdWithUser(fileId)
 				.orElseThrow(() -> new CustomException(ErrorCode.INVALID_FILE_REFERENCE));
 
 			if (!attachment.getUser().getId().equals(userId)) {
@@ -164,7 +166,6 @@ public class AsyncAnalysisProcessor {
 		throw new CustomException(ErrorCode.FASTAPI_TIMEOUT);
 	}
 
-	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	protected void handleAnalysisSuccess(Long taskId, Long roomId, FastApiTaskStatusResponse statusResponse) {
 		try {
 			AiChatRoom chatRoom = aiChatRoomRepository.findByIdAndIsDeletedFalse(roomId)
@@ -212,7 +213,6 @@ public class AsyncAnalysisProcessor {
 		}
 	}
 
-	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	protected void handleAnalysisFailure(Long taskId, String reason) {
 		asyncTaskService.markAsFailed(taskId, reason);
 		log.error("분석 실패 처리 완료: taskId={}, reason={}", taskId, LogSanitizer.sanitize(reason));
