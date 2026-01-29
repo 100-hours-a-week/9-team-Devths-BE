@@ -73,9 +73,12 @@ public class UserController {
 	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204")
 	@DeleteMapping
 	public ResponseEntity<Void> withdraw(
-		@AuthenticationPrincipal UserPrincipal userPrincipal
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		HttpServletResponse response
 	) {
 		userService.withdraw(userPrincipal.getUserId());
+
+		response.addCookie(CookieUtil.clearRefreshTokenCookie());
 
 		return ResponseEntity.noContent().build();
 	}
