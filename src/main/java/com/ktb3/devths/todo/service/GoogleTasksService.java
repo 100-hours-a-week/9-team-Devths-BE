@@ -237,6 +237,47 @@ public class GoogleTasksService {
 		}
 	}
 
+	/**
+	 * Google Tasks 삭제
+	 *
+	 * @param userId 사용자 ID
+	 * @param todoId 할 일 ID
+	 */
+	@Transactional
+	public void deleteTask(Long userId, String todoId) {
+		try {
+			SocialAccount socialAccount = socialAccountRepository.findByUser_IdAndProvider(userId, "GOOGLE")
+				.orElseThrow(() -> new CustomException(ErrorCode.UNAUTHORIZED));
+
+			refreshAccessTokenIfExpired(socialAccount);
+
+			Tasks tasksService = buildTasksClient(socialAccount);
+
+			tasksService.tasks()
+				.delete("@default", todoId)
+				.execute();
+
+			log.info("Google Tasks 삭제 성공: userId={}, taskId={}", userId, todoId);
+
+		} catch (CustomException e) {
+			throw e;
+		} catch (GoogleJsonResponseException e) {
+			if (e.getStatusCode() == 404) {
+				log.error("Google Tasks 찾을 수 없음: userId={}, todoId={}", userId, todoId, e);
+				throw new CustomException(ErrorCode.TODO_NOT_FOUND);
+			}
+			if (e.getStatusCode() == 403) {
+				log.error("Google Tasks 접근 권한 없음: userId={}", userId, e);
+				throw new CustomException(ErrorCode.GOOGLE_TASKS_ACCESS_DENIED);
+			}
+			log.error("Google Tasks 삭제 실패: userId={}, statusCode={}", userId, e.getStatusCode(), e);
+			throw new CustomException(ErrorCode.GOOGLE_TASKS_UNAVAILABLE);
+		} catch (Exception e) {
+			log.error("Google Tasks 삭제 실패: userId={}", userId, e);
+			throw new CustomException(ErrorCode.GOOGLE_TASKS_UNAVAILABLE);
+		}
+	}
+
 	private String convertToRfc3339(String dueDate) {
 		java.time.LocalDate localDate = java.time.LocalDate.parse(dueDate, java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
 		java.time.Instant instant = localDate.atStartOfDay(java.time.ZoneId.of("UTC")).toInstant();

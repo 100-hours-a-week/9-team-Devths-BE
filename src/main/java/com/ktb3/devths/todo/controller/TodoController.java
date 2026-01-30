@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -92,6 +93,24 @@ public class TodoController {
 
 		return ResponseEntity
 			.ok(ApiResponse.success("할 일의 완료 상태가 변경되었습니다.", response));
+	}
+
+	/**
+	 * To-do 삭제
+	 *
+	 * @param userPrincipal 인증된 사용자
+	 * @param todoId 할 일 ID
+	 * @return 204 No Content
+	 */
+	@DeleteMapping("/{todoId}")
+	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204")
+	public ResponseEntity<Void> deleteTodo(
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		@PathVariable String todoId
+	) {
+		todoService.deleteTodo(userPrincipal.getUserId(), todoId);
+
+		return ResponseEntity.noContent().build();
 	}
 
 	/**

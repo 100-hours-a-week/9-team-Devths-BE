@@ -92,6 +92,17 @@ public class TodoService {
 	}
 
 	/**
+	 * To-do 삭제
+	 *
+	 * @param userId 사용자 ID
+	 * @param todoId 할 일 ID
+	 */
+	@Transactional
+	public void deleteTodo(Long userId, String todoId) {
+		googleTasksService.deleteTask(userId, todoId);
+	}
+
+	/**
 	 * dueDate 필터 매칭
 	 */
 	private boolean matchesDueDateFilter(Task task, String dueDate) {
