@@ -79,6 +79,11 @@ management:
     health:
       show-details: never
   metrics:
+    enable:
+      # 모든 메트릭 비활성화
+      all: false
+      # Hikari 커넥션 풀만 활성화
+      hikaricp: true
     export:
       cloudwatch:
         namespace: ${CW_NAME_SPACE:devths-local}
