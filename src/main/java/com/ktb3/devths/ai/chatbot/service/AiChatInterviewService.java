@@ -1,16 +1,22 @@
 package com.ktb3.devths.ai.chatbot.service;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.ktb3.devths.ai.analysis.repository.AiOcrResultRepository;
 import com.ktb3.devths.ai.chatbot.domain.constant.InterviewStatus;
 import com.ktb3.devths.ai.chatbot.domain.constant.InterviewType;
+import com.ktb3.devths.ai.chatbot.domain.constant.MessageRole;
+import com.ktb3.devths.ai.chatbot.domain.constant.MessageType;
 import com.ktb3.devths.ai.chatbot.domain.entity.AiChatInterview;
 import com.ktb3.devths.ai.chatbot.domain.entity.AiChatMessage;
 import com.ktb3.devths.ai.chatbot.domain.entity.AiChatRoom;
@@ -20,6 +26,7 @@ import com.ktb3.devths.ai.chatbot.repository.AiChatMessageRepository;
 import com.ktb3.devths.ai.client.FastApiClient;
 import com.ktb3.devths.global.exception.CustomException;
 import com.ktb3.devths.global.response.ErrorCode;
+import com.ktb3.devths.global.util.LogSanitizer;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +41,7 @@ public class AiChatInterviewService {
 	private final AiChatMessageRepository aiChatMessageRepository;
 	private final AiOcrResultRepository aiOcrResultRepository;
 	private final FastApiClient fastApiClient;
+	private final TransactionTemplate transactionTemplate;
 
 	@Transactional
 	public AiChatInterview startInterview(AiChatRoom room, InterviewType interviewType) {
@@ -75,6 +83,7 @@ public class AiChatInterviewService {
 		Authentication currentAuth = SecurityContextHolder.getContext().getAuthentication();
 
 		AiChatInterview interview = getInterview(interviewId);
+		AiChatRoom room = interview.getRoom();
 
 		List<AiChatMessage> messages = aiChatMessageRepository.findAll().stream()
 			.filter(msg -> msg.getInterview() != null && msg.getInterview().getId().equals(interviewId))
@@ -92,8 +101,8 @@ public class AiChatInterviewService {
 			.collect(Collectors.toList());
 
 		// roomId와 userId 추출
-		Long roomId = interview.getRoom().getId();
-		Long userId = interview.getRoom().getUser().getId();
+		Long roomId = room.getId();
+		Long userId = room.getUser().getId();
 
 		FastApiInterviewEvaluationRequest request = new FastApiInterviewEvaluationRequest(
 			interviewId,
@@ -106,20 +115,74 @@ public class AiChatInterviewService {
 		log.info("면접 평가 시작: interviewId={}, roomId={}, userId={}, messageCount={}",
 			interviewId, roomId, userId, messages.size());
 
-		return fastApiClient.streamInterviewEvaluation(request)
-			.doOnComplete(() -> {
-				try {
-					// SecurityContext 복원
-					SecurityContextHolder.getContext().setAuthentication(currentAuth);
+		// 전체 평가 결과 누적용
+		StringBuilder fullEvaluation = new StringBuilder();
+		AtomicBoolean hasError = new AtomicBoolean(false);
 
-					completeInterview(interviewId);
-					log.info("면접 평가 완료: interviewId={}", interviewId);
-				} catch (Exception e) {
-					log.error("면접 완료 처리 실패: interviewId={}", interviewId, e);
-				} finally {
-					// SecurityContext 정리 (메모리 누수 방지)
-					SecurityContextHolder.clearContext();
+		return fastApiClient.streamInterviewEvaluation(request)
+			.doOnNext(chunk -> {
+				fullEvaluation.append(chunk);
+				log.debug("평가 결과 청크 수신: length={}", chunk.length());
+			})
+			.doOnComplete(() -> {
+				if (!hasError.get() && fullEvaluation.length() > 0) {
+					try {
+						// SecurityContext 복원
+						SecurityContextHolder.getContext().setAuthentication(currentAuth);
+
+						// TransactionTemplate을 사용하여 명시적으로 트랜잭션 시작
+						transactionTemplate.executeWithoutResult(status -> {
+							try {
+								// 1. 평가 결과 메시지 저장
+								saveEvaluationMessage(room, interview, fullEvaluation.toString());
+
+								// 2. 면접 상태를 COMPLETED로 변경
+								AiChatInterview interviewEntity = aiChatInterviewRepository.findById(interviewId)
+									.orElseThrow(() -> new CustomException(ErrorCode.INTERVIEW_NOT_FOUND));
+								interviewEntity.complete();
+
+								log.info("면접 평가 완료 및 저장: interviewId={}, evaluationLength={}",
+									interviewId, fullEvaluation.length());
+							} catch (Exception e) {
+								log.error("트랜잭션 내 처리 실패: interviewId={}", interviewId, e);
+								status.setRollbackOnly();
+								throw e;
+							}
+						});
+					} catch (Exception e) {
+						log.error("면접 평가 완료 처리 실패: interviewId={}", interviewId, e);
+					} finally {
+						// SecurityContext 정리 (메모리 누수 방지)
+						SecurityContextHolder.clearContext();
+					}
 				}
+			})
+			.doOnError(e -> {
+				hasError.set(true);
+				log.error("면접 평가 스트리밍 실패: interviewId={}",
+					LogSanitizer.sanitize(String.valueOf(interviewId)), e);
 			});
+	}
+
+	/**
+	 * 면접 평가 결과를 메시지로 저장
+	 */
+	private void saveEvaluationMessage(AiChatRoom room, AiChatInterview interview, String evaluationContent) {
+		Map<String, Object> metadata = new HashMap<>();
+		metadata.put("interview_type", interview.getInterviewType().name());
+		metadata.put("evaluation", true);
+
+		AiChatMessage message = AiChatMessage.builder()
+			.room(room)
+			.interview(interview)
+			.role(MessageRole.ASSISTANT)
+			.type(MessageType.INTERVIEW)
+			.content(evaluationContent)
+			.metadata(metadata)
+			.build();
+
+		aiChatMessageRepository.save(message);
+		log.debug("면접 평가 메시지 저장 완료: interviewId={}, messageId={}",
+			interview.getId(), message.getId());
 	}
 }
