@@ -231,19 +231,36 @@ public class AsyncAnalysisProcessor {
 		log.error("분석 실패 처리 완료: taskId={}, reason={}", taskId, LogSanitizer.sanitize(reason));
 	}
 
+	/**
+	 * FastAPI 응답에서 summary 추출 (Graceful Fallback 방식)
+	 * 1순위: result.summary (신규 구조)
+	 * 2순위: result.resume_analysis.summary (레거시 구조)
+	 * 3순위: 기본값 반환
+	 */
 	private String extractSummary(Map<String, Object> result) {
 		if (result == null) {
 			return "이력서 및 포트폴리오 분석 결과";
 		}
 
+		// 1순위: 새로운 구조 (result.summary)
+		Object summary = result.get("summary");
+		if (summary != null) {
+			log.debug("summary 추출 성공 (신규 구조)");
+			return summary.toString();
+		}
+
+		// 2순위: 기존 구조 (result.resume_analysis.summary) - Fallback
 		Object resumeAnalysis = result.get("resume_analysis");
 		if (resumeAnalysis instanceof Map) {
-			Object summary = ((Map<?, ?>)resumeAnalysis).get("summary");
-			if (summary != null) {
-				return summary.toString();
+			Object legacySummary = ((Map<?, ?>)resumeAnalysis).get("summary");
+			if (legacySummary != null) {
+				log.warn("summary 추출 (레거시 구조) - FastAPI 업데이트 필요");
+				return legacySummary.toString();
 			}
 		}
 
+		// 3순위: 기본값
+		log.warn("summary를 찾을 수 없음 - 기본값 반환");
 		return "이력서 및 포트폴리오 분석 결과";
 	}
 
