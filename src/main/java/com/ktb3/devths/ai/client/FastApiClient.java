@@ -1,6 +1,7 @@
 package com.ktb3.devths.ai.client;
 
 import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -89,8 +90,16 @@ public class FastApiClient {
 			.accept(MediaType.TEXT_EVENT_STREAM)
 			.bodyValue(request)
 			.retrieve()
-			.bodyToFlux(String.class)
-			.map(this::parseChunk)
+			.bodyToFlux(new org.springframework.core.ParameterizedTypeReference<ServerSentEvent<String>>() {
+			})
+			.mapNotNull(sse -> {
+				String data = sse.data();
+				if (data == null) {
+					return null;
+				}
+				log.debug("SSE 이벤트 수신 - id: {}, event: {}, data: '{}'", sse.id(), sse.event(), data);
+				return parseChunk(data);
+			})
 			.filter(chunk -> !chunk.equals("[DONE]"))
 			.doOnError(e -> log.error("FastAPI 스트리밍 실패", e))
 			.onErrorResume(e -> {
@@ -107,8 +116,16 @@ public class FastApiClient {
 			.accept(MediaType.TEXT_EVENT_STREAM)
 			.bodyValue(request)
 			.retrieve()
-			.bodyToFlux(String.class)
-			.map(this::parseChunk)
+			.bodyToFlux(new org.springframework.core.ParameterizedTypeReference<ServerSentEvent<String>>() {
+			})
+			.mapNotNull(sse -> {
+				String data = sse.data();
+				if (data == null) {
+					return null;
+				}
+				log.debug("SSE 이벤트 수신 (면접 평가) - id: {}, event: {}, data: '{}'", sse.id(), sse.event(), data);
+				return parseChunk(data);
+			})
 			.filter(chunk -> !chunk.equals("[DONE]"))
 			.doOnError(e -> log.error("FastAPI 면접 평가 스트리밍 실패", e))
 			.onErrorResume(e -> {
@@ -117,25 +134,32 @@ public class FastApiClient {
 			});
 	}
 
-	private String parseChunk(String sseData) {
+	private String parseChunk(String data) {
 		try {
-			if (sseData.startsWith("data: ")) {
-				String jsonData = sseData.substring(6).trim();
+			// ServerSentEvent에서 이미 data 부분만 추출되어 옴
+			log.debug("파싱할 데이터: '{}'", data);
 
-				if (jsonData.equals("[DONE]")) {
-					return "[DONE]";
-				}
-
-				JsonNode node = objectMapper.readTree(jsonData);
-				if (node.has("chunk")) {
-					return node.get("chunk").asText();
-				}
-
-				return "";
+			// [DONE] 신호 체크
+			if (data.equals("[DONE]")) {
+				log.debug("스트리밍 종료 신호 수신");
+				return "[DONE]";
 			}
+
+			// JSON 파싱
+			JsonNode node = objectMapper.readTree(data);
+			log.debug("파싱된 JSON: {}", node);
+
+			if (node.has("chunk")) {
+				String chunk = node.get("chunk").asText();
+				log.debug("추출된 chunk (길이: {}): '{}'", chunk.length(),
+					chunk.length() > 50 ? chunk.substring(0, 50) + "..." : chunk);
+				return chunk;
+			}
+
+			log.warn("JSON에 'chunk' 필드가 없음: {}", node);
 			return "";
 		} catch (Exception e) {
-			log.error("청크 파싱 실패: data={}", LogSanitizer.sanitize(sseData), e);
+			log.error("청크 파싱 실패: data={}", LogSanitizer.sanitize(data), e);
 			return "";
 		}
 	}

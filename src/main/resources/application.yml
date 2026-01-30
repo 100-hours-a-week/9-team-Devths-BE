@@ -97,3 +97,8 @@ async:
   max-pool-size: 20
   queue-capacity: 100
   thread-name-prefix: "async-analysis-"
+
+logging:
+  level:
+    com.ktb3.devths.ai.client.FastApiClient: DEBUG
+    com.ktb3.devths.ai.chatbot.service.AiChatMessageService: DEBUG
