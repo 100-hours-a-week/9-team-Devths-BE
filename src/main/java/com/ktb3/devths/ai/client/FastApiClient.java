@@ -119,20 +119,30 @@ public class FastApiClient {
 
 	private String parseChunk(String sseData) {
 		try {
+			// 디버깅: 실제로 받은 데이터 로깅
+			log.debug("수신한 SSE 데이터: '{}'", sseData);
+
 			if (sseData.startsWith("data: ")) {
 				String jsonData = sseData.substring(6).trim();
 
 				if (jsonData.equals("[DONE]")) {
+					log.debug("스트리밍 종료 신호 수신");
 					return "[DONE]";
 				}
 
 				JsonNode node = objectMapper.readTree(jsonData);
+				log.debug("파싱된 JSON: {}", node);
+
 				if (node.has("chunk")) {
-					return node.get("chunk").asText();
+					String chunk = node.get("chunk").asText();
+					log.debug("추출된 chunk: '{}'", chunk);
+					return chunk;
 				}
 
+				log.warn("JSON에 'chunk' 필드가 없음: {}", node);
 				return "";
 			}
+			log.warn("SSE 데이터가 'data: '로 시작하지 않음: '{}'", sseData);
 			return "";
 		} catch (Exception e) {
 			log.error("청크 파싱 실패: data={}", LogSanitizer.sanitize(sseData), e);
