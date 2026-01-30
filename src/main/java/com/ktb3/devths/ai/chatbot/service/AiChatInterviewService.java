@@ -3,6 +3,8 @@ package com.ktb3.devths.ai.chatbot.service;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -69,6 +71,9 @@ public class AiChatInterviewService {
 	}
 
 	public Flux<String> evaluateInterview(Long interviewId) {
+		// 현재 스레드의 Authentication 캡처 (여기서는 SecurityContext가 존재함)
+		Authentication currentAuth = SecurityContextHolder.getContext().getAuthentication();
+
 		AiChatInterview interview = getInterview(interviewId);
 
 		List<AiChatMessage> messages = aiChatMessageRepository.findAll().stream()
@@ -96,8 +101,18 @@ public class AiChatInterviewService {
 
 		return fastApiClient.streamInterviewEvaluation(request)
 			.doOnComplete(() -> {
-				completeInterview(interviewId);
-				log.info("면접 평가 완료: interviewId={}", interviewId);
+				try {
+					// SecurityContext 복원
+					SecurityContextHolder.getContext().setAuthentication(currentAuth);
+
+					completeInterview(interviewId);
+					log.info("면접 평가 완료: interviewId={}", interviewId);
+				} catch (Exception e) {
+					log.error("면접 완료 처리 실패: interviewId={}", interviewId, e);
+				} finally {
+					// SecurityContext 정리 (메모리 누수 방지)
+					SecurityContextHolder.clearContext();
+				}
 			});
 	}
 }

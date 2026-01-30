@@ -4,6 +4,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -58,6 +60,9 @@ public class AiChatMessageService {
 
 	public Flux<String> streamChatResponse(Long userId, Long roomId, String content, AiModel model,
 		Long interviewId) {
+		// 현재 스레드의 Authentication 캡처 (여기서는 SecurityContext가 존재함)
+		Authentication currentAuth = SecurityContextHolder.getContext().getAuthentication();
+
 		log.info("AI 챗봇 스트리밍 시작: roomId={}, userId={}, model={}, interviewId={}",
 			LogSanitizer.sanitize(String.valueOf(roomId)),
 			LogSanitizer.sanitize(String.valueOf(userId)),
@@ -117,10 +122,23 @@ public class AiChatMessageService {
 			})
 			.doOnComplete(() -> {
 				if (!hasError.get()) {
-					saveAssistantMessage(room, fullResponse.toString(), model, messageType, finalInterview);
-					log.info("AI 챗봇 스트리밍 완료: roomId={}, totalLength={}",
-						LogSanitizer.sanitize(String.valueOf(roomId)),
-						fullResponse.length());
+					try {
+						// SecurityContext 복원
+						SecurityContextHolder.getContext().setAuthentication(currentAuth);
+
+						saveAssistantMessage(room, fullResponse.toString(), model, messageType, finalInterview);
+						log.info("AI 챗봇 스트리밍 완료: roomId={}, totalLength={}",
+							LogSanitizer.sanitize(String.valueOf(roomId)),
+							fullResponse.length());
+					} catch (Exception e) {
+						log.error("어시스턴트 메시지 저장 실패: roomId={}, length={}",
+							LogSanitizer.sanitize(String.valueOf(roomId)),
+							fullResponse.length(),
+							e);
+					} finally {
+						// SecurityContext 정리 (메모리 누수 방지)
+						SecurityContextHolder.clearContext();
+					}
 				}
 			})
 			.doOnError(e -> {
@@ -128,11 +146,21 @@ public class AiChatMessageService {
 				log.error("AI 챗봇 스트리밍 실패: roomId={}", LogSanitizer.sanitize(String.valueOf(roomId)), e);
 
 				if (fullResponse.length() > 0) {
-					Map<String, Object> metadata = new HashMap<>();
-					metadata.put("model", model.name());
-					metadata.put("incomplete", true);
-					metadata.put("error", e.getMessage());
-					saveAssistantMessage(room, fullResponse.toString(), metadata, messageType, finalInterview);
+					try {
+						// SecurityContext 복원
+						SecurityContextHolder.getContext().setAuthentication(currentAuth);
+
+						Map<String, Object> metadata = new HashMap<>();
+						metadata.put("model", model.name());
+						metadata.put("incomplete", true);
+						metadata.put("error", e.getMessage());
+						saveAssistantMessage(room, fullResponse.toString(), metadata, messageType, finalInterview);
+					} catch (Exception ex) {
+						log.error("부분 응답 저장 실패: roomId={}",
+							LogSanitizer.sanitize(String.valueOf(roomId)), ex);
+					} finally {
+						SecurityContextHolder.clearContext();
+					}
 				}
 			})
 			.onErrorResume(e -> Flux.just("ERROR:" + e.getMessage()));
