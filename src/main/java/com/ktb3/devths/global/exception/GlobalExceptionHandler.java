@@ -1,17 +1,37 @@
 package com.ktb3.devths.global.exception;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import com.ktb3.devths.global.response.ApiResponse;
 import com.ktb3.devths.global.response.ErrorCode;
 
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+	@ExceptionHandler(AuthorizationDeniedException.class)
+	public ResponseEntity<ApiResponse<Void>> handleAuthorizationDeniedException(
+		AuthorizationDeniedException ex,
+		HttpServletResponse response
+	) {
+		// 응답이 이미 커밋된 경우 (SSE 등) 로깅만 수행
+		if (response.isCommitted()) {
+			log.error("응답 커밋 후 권한 예외 발생 (SSE 스트리밍): {}", ex.getMessage());
+			return null;
+		}
+
+		log.warn("권한 거부: {}", ex.getMessage());
+		return ResponseEntity
+			.status(HttpStatus.FORBIDDEN)
+			.body(ApiResponse.error(ErrorCode.ACCESS_DENIED));
+	}
 
 	@ExceptionHandler(CustomException.class)
 	public ResponseEntity<ApiResponse<Void>> handleCustomException(CustomException ex) {
