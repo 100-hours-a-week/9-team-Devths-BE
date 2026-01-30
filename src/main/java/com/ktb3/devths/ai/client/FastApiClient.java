@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -110,6 +111,13 @@ public class FastApiClient {
 
 	public Flux<String> streamInterviewEvaluation(FastApiInterviewEvaluationRequest request) {
 		String url = fastApiProperties.getBaseUrl() + "/ai/chat";
+
+		// 메타데이터만 로깅 (민감 정보 제외)
+		log.info("면접 평가 요청 - interviewId={}, type={}, messageCount={}",
+			LogSanitizer.sanitize(String.valueOf(request.interviewId())),
+			request.interviewType(),
+			request.messages().size());
+
 		return webClient.post()
 			.uri(url)
 			.contentType(MediaType.APPLICATION_JSON)
@@ -127,7 +135,18 @@ public class FastApiClient {
 				return parseChunk(data);
 			})
 			.filter(chunk -> !chunk.equals("[DONE]"))
-			.doOnError(e -> log.error("FastAPI 면접 평가 스트리밍 실패", e))
+			.doOnError(e -> {
+				log.error("FastAPI 면접 평가 스트리밍 실패", e);
+
+				// WebClientResponseException인 경우 에러 응답 body 로깅 (디버깅 필수)
+				if (e instanceof WebClientResponseException) {
+					WebClientResponseException webEx =
+						(WebClientResponseException)e;
+					log.error("FastAPI 에러 응답 - status={}, body={}",
+						webEx.getStatusCode(),
+						LogSanitizer.sanitize(webEx.getResponseBodyAsString()));
+				}
+			})
 			.onErrorResume(e -> {
 				log.error("FastAPI 면접 평가 스트리밍 에러", e);
 				return Flux.error(new CustomException(ErrorCode.FASTAPI_CONNECTION_FAILED));
