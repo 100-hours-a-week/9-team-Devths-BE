@@ -100,5 +100,5 @@ async:
 
 logging:
   level:
-    com.ktb3.devths.ai.client.FastApiClient: DEBUG
-    com.ktb3.devths.ai.chatbot.service.AiChatMessageService: DEBUG
+    com.ktb3.devths.ai.client.FastApiClient: ${LOG_LEVEL}
+    com.ktb3.devths.ai.chatbot.service.AiChatMessageService: ${LOG_LEVEL}
