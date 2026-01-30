@@ -91,13 +91,20 @@ public class AiChatInterviewService {
 			))
 			.collect(Collectors.toList());
 
+		// roomId와 userId 추출
+		Long roomId = interview.getRoom().getId();
+		Long userId = interview.getRoom().getUser().getId();
+
 		FastApiInterviewEvaluationRequest request = new FastApiInterviewEvaluationRequest(
 			interviewId,
 			interview.getInterviewType().name().toLowerCase(),
+			roomId,
+			userId,
 			interviewMessages
 		);
 
-		log.info("면접 평가 시작: interviewId={}, messageCount={}", interviewId, messages.size());
+		log.info("면접 평가 시작: interviewId={}, roomId={}, userId={}, messageCount={}",
+			interviewId, roomId, userId, messages.size());
 
 		return fastApiClient.streamInterviewEvaluation(request)
 			.doOnComplete(() -> {
