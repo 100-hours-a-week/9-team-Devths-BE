@@ -86,6 +86,57 @@ public class GoogleTasksService {
 	}
 
 	/**
+	 * Google Tasks 추가
+	 *
+	 * @param userId 사용자 ID
+	 * @param title 할 일 제목
+	 * @param dueDate 마감일 (yyyy-MM-dd)
+	 * @return Google Tasks ID
+	 */
+	@Transactional
+	public String createTask(Long userId, String title, String dueDate) {
+		try {
+			SocialAccount socialAccount = socialAccountRepository.findByUser_IdAndProvider(userId, "GOOGLE")
+				.orElseThrow(() -> new CustomException(ErrorCode.UNAUTHORIZED));
+
+			refreshAccessTokenIfExpired(socialAccount);
+
+			Tasks tasksService = buildTasksClient(socialAccount);
+
+			Task task = new Task();
+			task.setTitle(title);
+			task.setDue(convertToRfc3339(dueDate));
+			task.setStatus("needsAction");
+
+			Task createdTask = tasksService.tasks()
+				.insert("@default", task)
+				.execute();
+
+			log.info("Google Tasks 추가 성공: userId={}, taskId={}", userId, createdTask.getId());
+			return createdTask.getId();
+
+		} catch (CustomException e) {
+			throw e;
+		} catch (GoogleJsonResponseException e) {
+			if (e.getStatusCode() == 403) {
+				log.error("Google Tasks 접근 권한 없음: userId={}", userId, e);
+				throw new CustomException(ErrorCode.GOOGLE_TASKS_ACCESS_DENIED);
+			}
+			log.error("Google Tasks 추가 실패: userId={}, statusCode={}", userId, e.getStatusCode(), e);
+			throw new CustomException(ErrorCode.GOOGLE_TASKS_UNAVAILABLE);
+		} catch (Exception e) {
+			log.error("Google Tasks 추가 실패: userId={}", userId, e);
+			throw new CustomException(ErrorCode.GOOGLE_TASKS_UNAVAILABLE);
+		}
+	}
+
+	private String convertToRfc3339(String dueDate) {
+		java.time.LocalDate localDate = java.time.LocalDate.parse(dueDate, java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+		java.time.Instant instant = localDate.atStartOfDay(java.time.ZoneId.of("UTC")).toInstant();
+		return instant.toString();
+	}
+
+	/**
 	 * Google Tasks 클라이언트 생성
 	 */
 	private Tasks buildTasksClient(SocialAccount socialAccount) throws GeneralSecurityException, IOException {

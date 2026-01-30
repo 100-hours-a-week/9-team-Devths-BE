@@ -10,6 +10,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.google.api.services.tasks.model.Task;
+import com.ktb3.devths.todo.dto.request.TodoCreateRequest;
+import com.ktb3.devths.todo.dto.response.TodoCreateResponse;
 import com.ktb3.devths.todo.dto.response.TodoResponse;
 
 import lombok.RequiredArgsConstructor;
@@ -42,6 +44,19 @@ public class TodoService {
 			.filter(task -> matchesDueDateFilter(task, dueDate))
 			.map(this::convertToTodoResponse)
 			.toList();
+	}
+
+	/**
+	 * To-do 추가
+	 *
+	 * @param userId 사용자 ID
+	 * @param request To-do 추가 요청
+	 * @return To-do 추가 응답
+	 */
+	@Transactional
+	public TodoCreateResponse createTodo(Long userId, TodoCreateRequest request) {
+		String taskId = googleTasksService.createTask(userId, request.title(), request.dueDate());
+		return new TodoCreateResponse(taskId);
 	}
 
 	/**
