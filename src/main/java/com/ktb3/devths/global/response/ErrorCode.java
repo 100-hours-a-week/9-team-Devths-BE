@@ -35,6 +35,7 @@ public enum ErrorCode {
 	AI_CHATROOM_ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 AI 채팅방에 접근 권한이 없습니다"),
 	ASYNC_TASK_ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 작업에 접근 권한이 없습니다"),
 	GOOGLE_CALENDAR_ACCESS_DENIED(HttpStatus.FORBIDDEN, "Google Calendar 접근 권한이 없습니다"),
+	GOOGLE_TASKS_ACCESS_DENIED(HttpStatus.FORBIDDEN, "Google Tasks 접근 권한이 없습니다"),
 	EVENT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 일정에 접근 권한이 없습니다"),
 
 	// 404 Not Found
@@ -59,6 +60,7 @@ public enum ErrorCode {
 	// 503 Service Unavailable
 	FASTAPI_CONNECTION_FAILED(HttpStatus.SERVICE_UNAVAILABLE, "AI 서버 연결에 실패했습니다"),
 	GOOGLE_CALENDAR_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "Google Calendar 서비스를 일시적으로 사용할 수 없습니다"),
+	GOOGLE_TASKS_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "Google Tasks 서비스를 일시적으로 사용할 수 없습니다"),
 
 	// 504 Gateway Timeout
 	FASTAPI_TIMEOUT(HttpStatus.GATEWAY_TIMEOUT, "AI 서버 응답 시간이 초과되었습니다");
