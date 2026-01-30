@@ -83,8 +83,8 @@ management:
       cloudwatch:
         namespace: ${CW_NAME_SPACE:devths-local}
         step: 60s
-        enabled: true
-
+        enabled: ${CW_ENABLED:false}
+        batch-size: 20
 
 fastapi:
   base-url: ${FASTAPI_BASE_URL}
