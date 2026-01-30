@@ -90,7 +90,8 @@ public class FastApiClient {
 			.accept(MediaType.TEXT_EVENT_STREAM)
 			.bodyValue(request)
 			.retrieve()
-			.bodyToFlux(new org.springframework.core.ParameterizedTypeReference<ServerSentEvent<String>>() {})
+			.bodyToFlux(new org.springframework.core.ParameterizedTypeReference<ServerSentEvent<String>>() {
+			})
 			.mapNotNull(sse -> {
 				String data = sse.data();
 				if (data == null) {
@@ -115,7 +116,8 @@ public class FastApiClient {
 			.accept(MediaType.TEXT_EVENT_STREAM)
 			.bodyValue(request)
 			.retrieve()
-			.bodyToFlux(new org.springframework.core.ParameterizedTypeReference<ServerSentEvent<String>>() {})
+			.bodyToFlux(new org.springframework.core.ParameterizedTypeReference<ServerSentEvent<String>>() {
+			})
 			.mapNotNull(sse -> {
 				String data = sse.data();
 				if (data == null) {
