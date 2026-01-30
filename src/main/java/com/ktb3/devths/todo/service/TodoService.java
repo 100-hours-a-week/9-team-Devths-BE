@@ -11,9 +11,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.google.api.services.tasks.model.Task;
 import com.ktb3.devths.todo.dto.request.TodoCreateRequest;
+import com.ktb3.devths.todo.dto.request.TodoStatusUpdateRequest;
 import com.ktb3.devths.todo.dto.request.TodoUpdateRequest;
 import com.ktb3.devths.todo.dto.response.TodoCreateResponse;
 import com.ktb3.devths.todo.dto.response.TodoResponse;
+import com.ktb3.devths.todo.dto.response.TodoStatusUpdateResponse;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -72,6 +74,21 @@ public class TodoService {
 	public TodoCreateResponse updateTodo(Long userId, String todoId, TodoUpdateRequest request) {
 		String taskId = googleTasksService.updateTask(userId, todoId, request.title(), request.dueDate());
 		return new TodoCreateResponse(taskId);
+	}
+
+	/**
+	 * To-do 완료 상태 변경
+	 *
+	 * @param userId 사용자 ID
+	 * @param todoId 할 일 ID
+	 * @param request To-do 상태 변경 요청
+	 * @return To-do 상태 변경 응답
+	 */
+	@Transactional
+	public TodoStatusUpdateResponse updateTodoStatus(Long userId, String todoId, TodoStatusUpdateRequest request) {
+		Task updatedTask = googleTasksService.updateTaskStatus(userId, todoId, request.isCompleted());
+		boolean isCompleted = "completed".equals(updatedTask.getStatus());
+		return new TodoStatusUpdateResponse(updatedTask.getId(), isCompleted);
 	}
 
 	/**

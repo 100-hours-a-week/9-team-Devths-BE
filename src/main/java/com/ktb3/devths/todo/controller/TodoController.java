@@ -17,9 +17,11 @@ import org.springframework.web.bind.annotation.RestController;
 import com.ktb3.devths.global.response.ApiResponse;
 import com.ktb3.devths.global.security.UserPrincipal;
 import com.ktb3.devths.todo.dto.request.TodoCreateRequest;
+import com.ktb3.devths.todo.dto.request.TodoStatusUpdateRequest;
 import com.ktb3.devths.todo.dto.request.TodoUpdateRequest;
 import com.ktb3.devths.todo.dto.response.TodoCreateResponse;
 import com.ktb3.devths.todo.dto.response.TodoResponse;
+import com.ktb3.devths.todo.dto.response.TodoStatusUpdateResponse;
 import com.ktb3.devths.todo.service.TodoService;
 
 import jakarta.validation.Valid;
@@ -70,6 +72,26 @@ public class TodoController {
 
 		return ResponseEntity
 			.ok(ApiResponse.success("할 일이 성공적으로 수정되었습니다.", response));
+	}
+
+	/**
+	 * To-do 완료 상태 변경
+	 *
+	 * @param userPrincipal 인증된 사용자
+	 * @param todoId 할 일 ID
+	 * @param request To-do 상태 변경 요청
+	 * @return To-do 상태 변경 응답
+	 */
+	@PatchMapping("/{todoId}/status")
+	public ResponseEntity<ApiResponse<TodoStatusUpdateResponse>> updateTodoStatus(
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		@PathVariable String todoId,
+		@Valid @RequestBody TodoStatusUpdateRequest request
+	) {
+		TodoStatusUpdateResponse response = todoService.updateTodoStatus(userPrincipal.getUserId(), todoId, request);
+
+		return ResponseEntity
+			.ok(ApiResponse.success("할 일의 완료 상태가 변경되었습니다.", response));
 	}
 
 	/**
