@@ -53,6 +53,9 @@ SPRING_PROFILE="dev"
 if [[ "$DEPLOYMENT_GROUP_NAME" == *"Prod"* ]]; then
     SSM_PATH="/Prod/BE/"
     SPRING_PROFILE="prod"
+elif [[ "$DEPLOYMENT_GROUP_NAME" == *"Staging"* ]]; then
+    SSM_PATH="/Stg/BE/"
+    SPRING_PROFILE="stg"
 fi
 
 echo "> AWS SSM Parameter Store에서 환경변수 주입 (Path: $SSM_PATH)"

@@ -3,7 +3,7 @@ name: Devths-BE CI 파이프라인
 # dev/release/main 모두 진행
 on:
   pull_request:
-    branches: [ develop, release, main ]
+    branches: [ develop, release/*, main ]
 
 # ENV 설정
 env:
@@ -159,7 +159,7 @@ jobs:
         uses: sarisia/actions-status-discord@v1
         with:
           status: ${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success') && 'success' || 'failure' }}
-          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          webhook: ${{ github.event.pull_request.base.ref == 'main' && secrets.DISCORD_WEBHOOK_PROD_URL || secrets.DISCORD_WEBHOOK_URL }}
           title: "${{ github.event.pull_request.base.ref }} PR [${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success') && '✅성공' || '❌실패' }}]"
           description: |
             **PR 제목**: ${{ github.event.pull_request.title }}
