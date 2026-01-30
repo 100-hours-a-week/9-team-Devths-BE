@@ -30,6 +30,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 	private final JwtTokenValidator jwtTokenValidator;
 
 	@Override
+	protected boolean shouldNotFilterAsyncDispatch() {
+		// SSE 등 ASYNC 디스패치에서도 JWT 필터를 실행하여 SecurityContext 설정
+		return false;
+	}
+
+	@Override
 	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
 		FilterChain filterChain) throws ServletException, IOException {
 
