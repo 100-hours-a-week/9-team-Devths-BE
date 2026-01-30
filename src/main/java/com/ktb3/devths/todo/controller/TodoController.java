@@ -1,0 +1,133 @@
+package com.ktb3.devths.todo.controller;
+
+import java.util.List;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.ktb3.devths.global.response.ApiResponse;
+import com.ktb3.devths.global.security.UserPrincipal;
+import com.ktb3.devths.todo.dto.request.TodoCreateRequest;
+import com.ktb3.devths.todo.dto.request.TodoStatusUpdateRequest;
+import com.ktb3.devths.todo.dto.request.TodoUpdateRequest;
+import com.ktb3.devths.todo.dto.response.TodoCreateResponse;
+import com.ktb3.devths.todo.dto.response.TodoResponse;
+import com.ktb3.devths.todo.dto.response.TodoStatusUpdateResponse;
+import com.ktb3.devths.todo.service.TodoService;
+
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+
+@RestController
+@RequestMapping("/api/todos")
+@RequiredArgsConstructor
+public class TodoController {
+
+	private final TodoService todoService;
+
+	/**
+	 * To-do 추가
+	 *
+	 * @param userPrincipal 인증된 사용자
+	 * @param request To-do 추가 요청
+	 * @return To-do 추가 응답
+	 */
+	@PostMapping
+	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201")
+	public ResponseEntity<ApiResponse<TodoCreateResponse>> createTodo(
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		@Valid @RequestBody TodoCreateRequest request
+	) {
+		TodoCreateResponse response = todoService.createTodo(userPrincipal.getUserId(), request);
+
+		return ResponseEntity
+			.status(HttpStatus.CREATED)
+			.body(ApiResponse.success("할 일이 성공적으로 추가되었습니다.", response));
+	}
+
+	/**
+	 * To-do 수정
+	 *
+	 * @param userPrincipal 인증된 사용자
+	 * @param todoId 할 일 ID
+	 * @param request To-do 수정 요청
+	 * @return To-do 수정 응답
+	 */
+	@PatchMapping("/{todoId}")
+	public ResponseEntity<ApiResponse<TodoCreateResponse>> updateTodo(
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		@PathVariable String todoId,
+		@Valid @RequestBody TodoUpdateRequest request
+	) {
+		TodoCreateResponse response = todoService.updateTodo(userPrincipal.getUserId(), todoId, request);
+
+		return ResponseEntity
+			.ok(ApiResponse.success("할 일이 성공적으로 수정되었습니다.", response));
+	}
+
+	/**
+	 * To-do 완료 상태 변경
+	 *
+	 * @param userPrincipal 인증된 사용자
+	 * @param todoId 할 일 ID
+	 * @param request To-do 상태 변경 요청
+	 * @return To-do 상태 변경 응답
+	 */
+	@PatchMapping("/{todoId}/status")
+	public ResponseEntity<ApiResponse<TodoStatusUpdateResponse>> updateTodoStatus(
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		@PathVariable String todoId,
+		@Valid @RequestBody TodoStatusUpdateRequest request
+	) {
+		TodoStatusUpdateResponse response = todoService.updateTodoStatus(userPrincipal.getUserId(), todoId, request);
+
+		return ResponseEntity
+			.ok(ApiResponse.success("할 일의 완료 상태가 변경되었습니다.", response));
+	}
+
+	/**
+	 * To-do 삭제
+	 *
+	 * @param userPrincipal 인증된 사용자
+	 * @param todoId 할 일 ID
+	 * @return 204 No Content
+	 */
+	@DeleteMapping("/{todoId}")
+	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204")
+	public ResponseEntity<Void> deleteTodo(
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		@PathVariable String todoId
+	) {
+		todoService.deleteTodo(userPrincipal.getUserId(), todoId);
+
+		return ResponseEntity.noContent().build();
+	}
+
+	/**
+	 * To-do 목록 조회
+	 *
+	 * @param userPrincipal 인증된 사용자
+	 * @param dueDate 마감일 필터 (선택, yyyy-MM-dd)
+	 * @return To-do 목록
+	 */
+	@GetMapping
+	public ResponseEntity<ApiResponse<List<TodoResponse>>> getTodos(
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		@RequestParam(required = false) String dueDate
+	) {
+		List<TodoResponse> response = todoService.getTodos(userPrincipal.getUserId(), dueDate);
+
+		return ResponseEntity
+			.ok(ApiResponse.success("할 일 목록 조회에 성공하였습니다.", response));
+	}
+}
