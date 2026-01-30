@@ -119,7 +119,7 @@ public class TodoService {
 			LocalDate filterDate = LocalDate.parse(dueDate, DATE_FORMATTER);
 			return taskDueDate.equals(filterDate);
 		} catch (Exception e) {
-			log.warn("날짜 필터링 실패: taskId={}, dueDate={}", task.getId(), dueDate, e);
+			log.warn("날짜 필터링 실패", e);
 			return false;
 		}
 	}

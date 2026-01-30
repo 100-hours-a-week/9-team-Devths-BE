@@ -162,14 +162,14 @@ public class GoogleTasksService {
 				.update("@default", todoId, existingTask)
 				.execute();
 
-			log.info("Google Tasks 수정 성공: userId={}, taskId={}", userId, updatedTask.getId());
+			log.info("Google Tasks 수정 성공: userId={}", userId);
 			return updatedTask.getId();
 
 		} catch (CustomException e) {
 			throw e;
 		} catch (GoogleJsonResponseException e) {
 			if (e.getStatusCode() == 404) {
-				log.error("Google Tasks 찾을 수 없음: userId={}, todoId={}", userId, todoId, e);
+				log.error("Google Tasks 찾을 수 없음: userId={}", userId, e);
 				throw new CustomException(ErrorCode.TODO_NOT_FOUND);
 			}
 			if (e.getStatusCode() == 403) {
@@ -215,14 +215,14 @@ public class GoogleTasksService {
 				.update("@default", todoId, existingTask)
 				.execute();
 
-			log.info("Google Tasks 상태 변경 성공: userId={}, taskId={}, status={}", userId, updatedTask.getId(), newStatus);
+			log.info("Google Tasks 상태 변경 성공: userId={}, status={}", userId, newStatus);
 			return updatedTask;
 
 		} catch (CustomException e) {
 			throw e;
 		} catch (GoogleJsonResponseException e) {
 			if (e.getStatusCode() == 404) {
-				log.error("Google Tasks 찾을 수 없음: userId={}, todoId={}", userId, todoId, e);
+				log.error("Google Tasks 찾을 수 없음: userId={}", userId, e);
 				throw new CustomException(ErrorCode.TODO_NOT_FOUND);
 			}
 			if (e.getStatusCode() == 403) {
@@ -257,13 +257,13 @@ public class GoogleTasksService {
 				.delete("@default", todoId)
 				.execute();
 
-			log.info("Google Tasks 삭제 성공: userId={}, taskId={}", userId, todoId);
+			log.info("Google Tasks 삭제 성공: userId={}", userId);
 
 		} catch (CustomException e) {
 			throw e;
 		} catch (GoogleJsonResponseException e) {
 			if (e.getStatusCode() == 404) {
-				log.error("Google Tasks 찾을 수 없음: userId={}, todoId={}", userId, todoId, e);
+				log.error("Google Tasks 찾을 수 없음: userId={}", userId, e);
 				throw new CustomException(ErrorCode.TODO_NOT_FOUND);
 			}
 			if (e.getStatusCode() == 403) {
