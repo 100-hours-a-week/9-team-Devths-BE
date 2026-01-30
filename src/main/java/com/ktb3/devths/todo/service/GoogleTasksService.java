@@ -130,6 +130,60 @@ public class GoogleTasksService {
 		}
 	}
 
+	/**
+	 * Google Tasks 수정
+	 *
+	 * @param userId 사용자 ID
+	 * @param todoId 할 일 ID
+	 * @param title 할 일 제목
+	 * @param dueDate 마감일 (yyyy-MM-dd)
+	 * @return Google Tasks ID
+	 */
+	@Transactional
+	public String updateTask(Long userId, String todoId, String title, String dueDate) {
+		try {
+			SocialAccount socialAccount = socialAccountRepository.findByUser_IdAndProvider(userId, "GOOGLE")
+				.orElseThrow(() -> new CustomException(ErrorCode.UNAUTHORIZED));
+
+			refreshAccessTokenIfExpired(socialAccount);
+
+			Tasks tasksService = buildTasksClient(socialAccount);
+
+			// 기존 Task 조회 (존재 여부 확인)
+			Task existingTask = tasksService.tasks()
+				.get("@default", todoId)
+				.execute();
+
+			// Task 업데이트
+			existingTask.setTitle(title);
+			existingTask.setDue(convertToRfc3339(dueDate));
+
+			Task updatedTask = tasksService.tasks()
+				.update("@default", todoId, existingTask)
+				.execute();
+
+			log.info("Google Tasks 수정 성공: userId={}, taskId={}", userId, updatedTask.getId());
+			return updatedTask.getId();
+
+		} catch (CustomException e) {
+			throw e;
+		} catch (GoogleJsonResponseException e) {
+			if (e.getStatusCode() == 404) {
+				log.error("Google Tasks 찾을 수 없음: userId={}, todoId={}", userId, todoId, e);
+				throw new CustomException(ErrorCode.TODO_NOT_FOUND);
+			}
+			if (e.getStatusCode() == 403) {
+				log.error("Google Tasks 접근 권한 없음: userId={}", userId, e);
+				throw new CustomException(ErrorCode.GOOGLE_TASKS_ACCESS_DENIED);
+			}
+			log.error("Google Tasks 수정 실패: userId={}, statusCode={}", userId, e.getStatusCode(), e);
+			throw new CustomException(ErrorCode.GOOGLE_TASKS_UNAVAILABLE);
+		} catch (Exception e) {
+			log.error("Google Tasks 수정 실패: userId={}", userId, e);
+			throw new CustomException(ErrorCode.GOOGLE_TASKS_UNAVAILABLE);
+		}
+	}
+
 	private String convertToRfc3339(String dueDate) {
 		java.time.LocalDate localDate = java.time.LocalDate.parse(dueDate, java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
 		java.time.Instant instant = localDate.atStartOfDay(java.time.ZoneId.of("UTC")).toInstant();

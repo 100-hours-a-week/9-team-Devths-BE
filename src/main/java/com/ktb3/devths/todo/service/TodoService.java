@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.google.api.services.tasks.model.Task;
 import com.ktb3.devths.todo.dto.request.TodoCreateRequest;
+import com.ktb3.devths.todo.dto.request.TodoUpdateRequest;
 import com.ktb3.devths.todo.dto.response.TodoCreateResponse;
 import com.ktb3.devths.todo.dto.response.TodoResponse;
 
@@ -56,6 +57,20 @@ public class TodoService {
 	@Transactional
 	public TodoCreateResponse createTodo(Long userId, TodoCreateRequest request) {
 		String taskId = googleTasksService.createTask(userId, request.title(), request.dueDate());
+		return new TodoCreateResponse(taskId);
+	}
+
+	/**
+	 * To-do 수정
+	 *
+	 * @param userId 사용자 ID
+	 * @param todoId 할 일 ID
+	 * @param request To-do 수정 요청
+	 * @return To-do 수정 응답
+	 */
+	@Transactional
+	public TodoCreateResponse updateTodo(Long userId, String todoId, TodoUpdateRequest request) {
+		String taskId = googleTasksService.updateTask(userId, todoId, request.title(), request.dueDate());
 		return new TodoCreateResponse(taskId);
 	}
 
