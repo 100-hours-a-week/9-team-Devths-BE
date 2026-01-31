@@ -1,0 +1,8 @@
+name: "CodeQL Light"
+queries:
+  - uses: security-extended  # 중간 강도
+paths:
+  - 'src/main/java/**'
+paths-ignore:
+  - '**/test/**'
+  - '**/build/**'

@@ -4,8 +4,106 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${MAXIMUM_POOL_SIZE}
+      minimum-idle: ${MINIMUM_IDLE}
+      connection-timeout: ${CONNECTION_TIMEOUT}
+      idle-timeout: ${IDLE_TIMEOUT}
 
   jpa:
     hibernate:
-      ddl-auto: validate
-    show-sql: false
+      ddl-auto: ${SPRING_JPA_DDL_AUTO}
+    show-sql: true
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope:
+              - email
+              - profile
+              - openid
+              - https://www.googleapis.com/auth/calendar
+              - https://www.googleapis.com/auth/tasks
+            redirect-uri: ${GOOGLE_REDIRECT_URI}
+            authorization-grant-type: authorization_code
+        provider:
+          google:
+            authorization-uri: https://accounts.google.com/o/oauth2/v2/auth
+            token-uri: https://oauth2.googleapis.com/token
+            user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
+            user-name-attribute: sub
+
+jwt:
+  secret: ${JWT_SECRET}
+  access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION}
+  refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION}
+  temp-token-expiration: ${JWT_TEMP_TOKEN_EXPIRATION}
+
+encryption:
+  aes-key: ${ENCRYPTION_AES_KEY}
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS}
+  allowed-methods: GET,POST,PUT,DELETE,PATCH,OPTIONS
+  allowed-headers: Content-Type,Authorization,Accept,X-Requested-With
+  exposed-headers: Authorization
+  allow-credentials: true
+  max-age: 3600
+
+server:
+  # Nginx가 보내준 X-Forwarded-* 헤더를 사용하여 클라이언트 정보를 덮어씌움
+  forward-headers-strategy: native
+
+cloud:
+  aws:
+    credentials:
+      access-key: ${S3_ACCESS_KEY}
+      secret-key: ${S3_SECRET_KEY}
+    region:
+      static-region: ${S3_REGION}
+    s3:
+      bucket: ${S3_BUCKET}
+    stack:
+      auto: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+  metrics:
+    enable:
+      # 모든 메트릭 비활성화
+      all: false
+      # Hikari 커넥션 풀만 활성화
+      hikaricp: true
+    export:
+      cloudwatch:
+        namespace: ${CW_NAME_SPACE:devths-local}
+        step: 60s
+        enabled: ${CW_ENABLED:false}
+        batch-size: 20
+
+fastapi:
+  base-url: ${FASTAPI_BASE_URL}
+  timeout: 30000
+  poll-interval: 2000
+  max-poll-attempts: 50
+
+async:
+  core-pool-size: 10
+  max-pool-size: 20
+  queue-capacity: 100
+  thread-name-prefix: "async-analysis-"
+
+logging:
+  level:
+    com.ktb3.devths.ai.client.FastApiClient: ${LOG_LEVEL}
+    com.ktb3.devths.ai.chatbot.service.AiChatMessageService: ${LOG_LEVEL}
