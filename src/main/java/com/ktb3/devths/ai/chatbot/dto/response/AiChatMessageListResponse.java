@@ -20,7 +20,8 @@ public record AiChatMessageListResponse(
 			.map(AiChatMessageResponse::from)
 			.toList();
 
-		Long lastId = messages.isEmpty() ? null : messages.getLast().messageId();
+		// 스크롤 위로 올릴 때 사용할 커서 (가장 오래된 메시지 ID)
+		Long lastId = messages.isEmpty() ? null : messages.getFirst().messageId();
 
 		return new AiChatMessageListResponse(messages, lastId, hasNext);
 	}
