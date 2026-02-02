@@ -83,6 +83,12 @@ public class AiChatMessageService {
 			interview = aiChatInterviewRepository.findById(interviewId)
 				.orElseThrow(() -> new CustomException(ErrorCode.INTERVIEW_NOT_FOUND));
 
+			// 5개 질문 제한 체크
+			if (interview.getCurrentQuestionCount() >= 5) {
+				interview.complete();
+				throw new CustomException(ErrorCode.INTERVIEW_COMPLETED_EVALUATION_REQUIRED);
+			}
+
 			interview.incrementQuestionCount();
 
 			AiOcrResult ocrResult = aiOcrResultRepository.findByRoomId(roomId).orElse(null);

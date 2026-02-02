@@ -16,6 +16,7 @@ public enum ErrorCode {
 	INVALID_AUTH_CODE(HttpStatus.BAD_REQUEST, "유효하지 않은 인증 코드입니다"),
 	INVALID_FILE_REFERENCE(HttpStatus.BAD_REQUEST, "유효하지 않은 파일 참조입니다"),
 	INVALID_EVENT_TIME(HttpStatus.BAD_REQUEST, "일정 시작 시간은 종료 시간보다 이전이어야 합니다"),
+	INTERVIEW_COMPLETED_EVALUATION_REQUIRED(HttpStatus.BAD_REQUEST, "면접 질문 5개가 완료되었습니다. 평가를 진행해주세요."),
 
 	// 401 Unauthorized
 	UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "인증이 필요합니다"),
