@@ -78,8 +78,8 @@ public class AiChatRoomService {
 		Pageable pageable = PageRequest.of(0, pageSize + 1);
 
 		List<AiChatMessage> messages = (lastId == null)
-			? aiChatMessageRepository.findByRoomIdOrderByCreatedAtDesc(roomId, pageable)
-			: aiChatMessageRepository.findByRoomIdAndIdLessThanOrderByCreatedAtDesc(roomId, lastId, pageable);
+			? aiChatMessageRepository.findByRoomIdOrderByIdDesc(roomId, pageable)
+			: aiChatMessageRepository.findByRoomIdAndIdLessThanOrderByIdDesc(roomId, lastId, pageable);
 
 		// DESC로 조회했으므로 reverse하여 ASC 순서로 변환
 		Collections.reverse(messages);
