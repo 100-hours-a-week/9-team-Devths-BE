@@ -1,5 +1,6 @@
 package com.ktb3.devths.ai.chatbot.dto.response;
 
+import java.util.Collections;
 import java.util.List;
 
 import com.ktb3.devths.ai.chatbot.domain.entity.AiChatMessage;
@@ -16,7 +17,11 @@ public record AiChatMessageListResponse(
 			? chatMessages.subList(0, requestedSize)
 			: chatMessages;
 
-		List<AiChatMessageResponse> messages = actualMessages.stream()
+		// DESC로 조회했으므로 reverse하여 ASC 순서로 변환
+		List<AiChatMessage> ordered = new java.util.ArrayList<>(actualMessages);
+		Collections.reverse(ordered);
+
+		List<AiChatMessageResponse> messages = ordered.stream()
 			.map(AiChatMessageResponse::from)
 			.toList();
 
