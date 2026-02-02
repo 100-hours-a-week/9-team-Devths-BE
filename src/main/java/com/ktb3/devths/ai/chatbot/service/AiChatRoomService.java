@@ -1,6 +1,5 @@
 package com.ktb3.devths.ai.chatbot.service;
 
-import java.util.Collections;
 import java.util.List;
 
 import org.springframework.data.domain.PageRequest;
@@ -80,9 +79,6 @@ public class AiChatRoomService {
 		List<AiChatMessage> messages = (lastId == null)
 			? aiChatMessageRepository.findByRoomIdOrderByIdDesc(roomId, pageable)
 			: aiChatMessageRepository.findByRoomIdAndIdLessThanOrderByIdDesc(roomId, lastId, pageable);
-
-		// DESC로 조회했으므로 reverse하여 ASC 순서로 변환
-		Collections.reverse(messages);
 
 		return AiChatMessageListResponse.of(messages, pageSize);
 	}
