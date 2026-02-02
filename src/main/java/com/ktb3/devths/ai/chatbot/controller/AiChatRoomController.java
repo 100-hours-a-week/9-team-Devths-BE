@@ -22,6 +22,7 @@ import com.ktb3.devths.ai.chatbot.dto.request.InterviewStartRequest;
 import com.ktb3.devths.ai.chatbot.dto.response.AiChatMessageListResponse;
 import com.ktb3.devths.ai.chatbot.dto.response.AiChatRoomCreateResponse;
 import com.ktb3.devths.ai.chatbot.dto.response.AiChatRoomListResponse;
+import com.ktb3.devths.ai.chatbot.dto.response.CurrentInterviewResponse;
 import com.ktb3.devths.ai.chatbot.dto.response.InterviewStartResponse;
 import com.ktb3.devths.ai.chatbot.repository.AiChatRoomRepository;
 import com.ktb3.devths.ai.chatbot.service.AiChatInterviewService;
@@ -137,6 +138,32 @@ public class AiChatRoomController {
 				.build()));
 	}
 
+	@GetMapping("/{roomId}/interview/current")
+	public ResponseEntity<ApiResponse<CurrentInterviewResponse>> getCurrentInterview(
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		@PathVariable Long roomId
+	) {
+		AiChatRoom room = aiChatRoomRepository.findByIdAndIsDeletedFalse(roomId)
+			.orElseThrow(() -> new CustomException(ErrorCode.AI_CHATROOM_NOT_FOUND));
+
+		if (!room.getUser().getId().equals(userPrincipal.getUserId())) {
+			throw new CustomException(ErrorCode.AI_CHATROOM_ACCESS_DENIED);
+		}
+
+		var currentInterview = aiChatInterviewService.getCurrentInterview(roomId);
+
+		if (currentInterview.isEmpty()) {
+			return ResponseEntity.ok(
+				ApiResponse.success("진행 중인 면접이 없습니다.", null)
+			);
+		}
+
+		CurrentInterviewResponse response = CurrentInterviewResponse.from(currentInterview.get());
+		return ResponseEntity.ok(
+			ApiResponse.success("진행 중인 면접 정보를 조회했습니다.", response)
+		);
+	}
+
 	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201")
 	@PostMapping("/{roomId}/interview")
 	public ResponseEntity<ApiResponse<InterviewStartResponse>> startInterview(
@@ -153,13 +180,22 @@ public class AiChatRoomController {
 
 		AiChatInterview interview = aiChatInterviewService.startInterview(room, request.interviewType());
 
+		// 재진입 여부 확인 (질문 수가 0보다 크면 재진입)
+		boolean isResumed = interview.getCurrentQuestionCount() > 0;
+
 		InterviewStartResponse response = new InterviewStartResponse(
 			interview.getId(),
-			interview.getInterviewType().name()
+			interview.getInterviewType().name(),
+			interview.getCurrentQuestionCount(),
+			isResumed
 		);
 
+		String message = isResumed
+			? "기존 면접을 계속 진행합니다."
+			: "면접이 시작되었습니다.";
+
 		return ResponseEntity.status(HttpStatus.CREATED)
-			.body(ApiResponse.success("면접이 시작되었습니다.", response));
+			.body(ApiResponse.success(message, response));
 	}
 
 	@PostMapping(value = "/{roomId}/evaluation", produces = MediaType.TEXT_EVENT_STREAM_VALUE)

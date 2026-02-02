@@ -52,6 +52,7 @@ public enum ErrorCode {
 	DUPLICATE_NICKNAME(HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다"),
 	DUPLICATE_ANALYSIS(HttpStatus.CONFLICT, "이미 진행 중인 분석 작업이 있습니다"),
 	INTERVIEW_ALREADY_IN_PROGRESS(HttpStatus.CONFLICT, "이미 진행 중인 면접이 있습니다"),
+	INTERVIEW_TYPE_MISMATCH(HttpStatus.CONFLICT, "진행 중인 면접과 다른 타입의 면접은 시작할 수 없습니다"),
 
 	// 500 Internal Server Error
 	INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다"),
