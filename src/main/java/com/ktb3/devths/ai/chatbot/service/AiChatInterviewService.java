@@ -3,6 +3,7 @@ package com.ktb3.devths.ai.chatbot.service;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -45,11 +46,26 @@ public class AiChatInterviewService {
 
 	@Transactional
 	public AiChatInterview startInterview(AiChatRoom room, InterviewType interviewType) {
-		aiChatInterviewRepository.findByRoomIdAndStatus(room.getId(), InterviewStatus.IN_PROGRESS)
-			.ifPresent(interview -> {
-				throw new CustomException(ErrorCode.INTERVIEW_ALREADY_IN_PROGRESS);
-			});
+		// 진행 중인 면접이 있는지 확인
+		var existingInterview = aiChatInterviewRepository.findByRoomIdAndStatus(
+			room.getId(), InterviewStatus.IN_PROGRESS);
 
+		if (existingInterview.isPresent()) {
+			AiChatInterview interview = existingInterview.get();
+
+			// 면접 타입이 다르면 에러 발생
+			if (interview.getInterviewType() != interviewType) {
+				throw new CustomException(ErrorCode.INTERVIEW_TYPE_MISMATCH);
+			}
+
+			// 동일한 타입이면 기존 면접 반환 (멱등성)
+			log.info("기존 진행 중인 면접 재사용: interviewId={}, roomId={}, type={}, currentCount={}",
+				interview.getId(), room.getId(), interviewType, interview.getCurrentQuestionCount());
+
+			return interview;
+		}
+
+		// 진행 중인 면접이 없으면 새로 생성
 		AiChatInterview interview = AiChatInterview.builder()
 			.room(room)
 			.interviewType(interviewType)
@@ -58,7 +74,7 @@ public class AiChatInterviewService {
 			.build();
 
 		AiChatInterview savedInterview = aiChatInterviewRepository.save(interview);
-		log.info("면접 시작: interviewId={}, roomId={}, type={}", savedInterview.getId(), room.getId(), interviewType);
+		log.info("새 면접 시작: interviewId={}, roomId={}, type={}", savedInterview.getId(), room.getId(), interviewType);
 
 		return savedInterview;
 	}
@@ -76,6 +92,11 @@ public class AiChatInterviewService {
 	public AiChatInterview getInterview(Long interviewId) {
 		return aiChatInterviewRepository.findById(interviewId)
 			.orElseThrow(() -> new CustomException(ErrorCode.INTERVIEW_NOT_FOUND));
+	}
+
+	@Transactional(readOnly = true)
+	public Optional<AiChatInterview> getCurrentInterview(Long roomId) {
+		return aiChatInterviewRepository.findByRoomIdAndStatus(roomId, InterviewStatus.IN_PROGRESS);
 	}
 
 	public Flux<String> evaluateInterview(Long interviewId) {
