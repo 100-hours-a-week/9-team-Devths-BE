@@ -10,17 +10,16 @@ public record DocumentAnalysisRequest(
 	AiModel model,
 
 	@NotNull(message = "이력서 정보는 필수입니다")
-	@Size(min = 1, max = 2000)
 	DocumentInfo resume,
 
 	@NotNull(message = "채용공고 정보는 필수입니다")
-	@Size(min = 1, max = 2000)
 	DocumentInfo jobPost
 ) {
 	public record DocumentInfo(
 		Long fileId,
 		String s3Key,
 		String fileType,
+		@Size(min = 1, max = 2000)
 		String text
 	) {
 		public boolean hasFileReference() {
