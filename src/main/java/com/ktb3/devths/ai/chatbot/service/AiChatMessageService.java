@@ -88,12 +88,12 @@ public class AiChatMessageService {
 				throw new CustomException(ErrorCode.INTERVIEW_COMPLETED_EVALUATION_REQUIRED);
 			}
 
-			interview.incrementQuestionCount();
-
 			// 5개 질문 제한 체크
 			if (interview.getCurrentQuestionCount() > 5) {
 				throw new CustomException(ErrorCode.INTERVIEW_COMPLETED_EVALUATION_REQUIRED);
 			}
+
+			interview.incrementQuestionCount();
 
 			AiOcrResult ocrResult = aiOcrResultRepository.findByRoomId(roomId).orElse(null);
 			String resumeOcr = ocrResult != null ? ocrResult.getResumeOcr() : "";
