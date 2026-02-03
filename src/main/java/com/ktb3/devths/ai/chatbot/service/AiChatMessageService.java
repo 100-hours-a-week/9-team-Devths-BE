@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.ktb3.devths.ai.analysis.domain.AiOcrResult;
 import com.ktb3.devths.ai.analysis.repository.AiOcrResultRepository;
+import com.ktb3.devths.ai.chatbot.domain.constant.InterviewStatus;
 import com.ktb3.devths.ai.chatbot.domain.constant.MessageRole;
 import com.ktb3.devths.ai.chatbot.domain.constant.MessageType;
 import com.ktb3.devths.ai.chatbot.domain.entity.AiChatInterview;
@@ -82,6 +83,15 @@ public class AiChatMessageService {
 		if (interviewId != null) {
 			interview = aiChatInterviewRepository.findById(interviewId)
 				.orElseThrow(() -> new CustomException(ErrorCode.INTERVIEW_NOT_FOUND));
+
+			if (interview.getStatus() == InterviewStatus.COMPLETED) {
+				throw new CustomException(ErrorCode.INTERVIEW_COMPLETED_EVALUATION_REQUIRED);
+			}
+
+			// 5개 질문 제한 체크
+			if (interview.getCurrentQuestionCount() > 5) {
+				throw new CustomException(ErrorCode.INTERVIEW_COMPLETED_EVALUATION_REQUIRED);
+			}
 
 			interview.incrementQuestionCount();
 

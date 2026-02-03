@@ -196,6 +196,7 @@ public class AsyncAnalysisProcessor {
 			);
 
 			chatRoom.updateTitle(summary);
+			aiChatRoomRepository.save(chatRoom);
 
 			saveOcrResultIfPresent(chatRoom, statusResponse.result());
 
