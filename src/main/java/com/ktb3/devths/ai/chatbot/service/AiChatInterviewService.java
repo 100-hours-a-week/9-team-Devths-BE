@@ -79,15 +79,6 @@ public class AiChatInterviewService {
 		return savedInterview;
 	}
 
-	@Transactional
-	public void completeInterview(Long interviewId) {
-		AiChatInterview interview = aiChatInterviewRepository.findById(interviewId)
-			.orElseThrow(() -> new CustomException(ErrorCode.INTERVIEW_NOT_FOUND));
-
-		interview.complete();
-		log.info("면접 완료: interviewId={}", interviewId);
-	}
-
 	@Transactional(readOnly = true)
 	public AiChatInterview getInterview(Long interviewId) {
 		return aiChatInterviewRepository.findById(interviewId)
