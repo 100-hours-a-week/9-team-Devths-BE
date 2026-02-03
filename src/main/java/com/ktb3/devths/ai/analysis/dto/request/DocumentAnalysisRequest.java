@@ -3,15 +3,18 @@ package com.ktb3.devths.ai.analysis.dto.request;
 import com.ktb3.devths.ai.constant.AiModel;
 
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 public record DocumentAnalysisRequest(
 	@NotNull(message = "AI 모델은 필수입니다")
 	AiModel model,
 
 	@NotNull(message = "이력서 정보는 필수입니다")
+	@Size(min = 1, max = 2000)
 	DocumentInfo resume,
 
 	@NotNull(message = "채용공고 정보는 필수입니다")
+	@Size(min = 1, max = 2000)
 	DocumentInfo jobPost
 ) {
 	public record DocumentInfo(
