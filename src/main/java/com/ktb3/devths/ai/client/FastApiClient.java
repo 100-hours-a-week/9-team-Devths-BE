@@ -1,5 +1,6 @@
 package com.ktb3.devths.ai.client;
 
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
@@ -17,6 +18,8 @@ import com.ktb3.devths.ai.chatbot.dto.request.FastApiChatRequest;
 import com.ktb3.devths.ai.chatbot.dto.request.FastApiInterviewEvaluationRequest;
 import com.ktb3.devths.global.config.properties.FastApiProperties;
 import com.ktb3.devths.global.exception.CustomException;
+import com.ktb3.devths.global.ratelimit.domain.constant.ApiType;
+import com.ktb3.devths.global.ratelimit.service.RateLimitService;
 import com.ktb3.devths.global.response.ErrorCode;
 import com.ktb3.devths.global.util.LogSanitizer;
 
@@ -33,8 +36,11 @@ public class FastApiClient {
 	private final WebClient webClient;
 	private final FastApiProperties fastApiProperties;
 	private final ObjectMapper objectMapper;
+	private final RateLimitService rateLimitService;
 
 	public FastApiAnalysisResponse requestAnalysis(FastApiAnalysisRequest request) {
+		rateLimitService.consumeToken(request.userId(), ApiType.FASTAPI_ANALYSIS);
+
 		try {
 			String url = fastApiProperties.getBaseUrl() + "/ai/text/extract";
 
@@ -91,7 +97,7 @@ public class FastApiClient {
 			.accept(MediaType.TEXT_EVENT_STREAM)
 			.bodyValue(request)
 			.retrieve()
-			.bodyToFlux(new org.springframework.core.ParameterizedTypeReference<ServerSentEvent<String>>() {
+			.bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {
 			})
 			.mapNotNull(sse -> {
 				String data = sse.data();
@@ -124,7 +130,7 @@ public class FastApiClient {
 			.accept(MediaType.TEXT_EVENT_STREAM)
 			.bodyValue(request)
 			.retrieve()
-			.bodyToFlux(new org.springframework.core.ParameterizedTypeReference<ServerSentEvent<String>>() {
+			.bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {
 			})
 			.mapNotNull(sse -> {
 				String data = sse.data();
@@ -168,6 +174,20 @@ public class FastApiClient {
 			JsonNode node = objectMapper.readTree(data);
 			log.debug("파싱된 JSON: {}", node);
 
+			// 에러 페이로드 감지
+			if (node.has("type") && "error".equals(node.get("type").asText())) {
+				String fallbackMessage = node.path("fallback").asText("");
+				String errorCode = node.path("error").path("code").asText("");
+				int errorStatus = node.path("error").path("status").asInt(0);
+
+				log.warn("FastAPI 에러 응답 수신 - code: {}, status: {}, fallback: '{}'",
+					errorCode, errorStatus, fallbackMessage);
+
+				// 특수 마커 반환: "[ERROR]" + fallback 메시지
+				return "[ERROR]" + fallbackMessage;
+			}
+
+			// 정상 청크
 			if (node.has("chunk")) {
 				String chunk = node.get("chunk").asText();
 				log.debug("추출된 chunk (길이: {}): '{}'", chunk.length(),

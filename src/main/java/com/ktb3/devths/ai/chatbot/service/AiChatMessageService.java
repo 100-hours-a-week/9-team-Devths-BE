@@ -79,6 +79,7 @@ public class AiChatMessageService {
 
 		AiChatInterview interview = null;
 		FastApiChatContext context = FastApiChatContext.createNormalMode();
+		boolean shouldGenerateNextQuestion = true;
 
 		if (interviewId != null) {
 			interview = aiChatInterviewRepository.findById(interviewId)
@@ -92,9 +93,20 @@ public class AiChatMessageService {
 			if (interview.getCurrentQuestionCount() > 5) {
 				throw new CustomException(ErrorCode.INTERVIEW_COMPLETED_EVALUATION_REQUIRED);
 			}
+			shouldGenerateNextQuestion = interview.getCurrentQuestionCount() < 5;
+		}
 
-			interview.incrementQuestionCount();
+		MessageType messageType = interviewId != null ? MessageType.INTERVIEW : MessageType.NORMAL;
+		AiChatInterview finalInterview = interview;
 
+		saveUserMessage(room, content, messageType, interview);
+
+		if (interviewId != null && !shouldGenerateNextQuestion) {
+			SecurityContextHolder.clearContext();
+			return Flux.empty();
+		}
+
+		if (interviewId != null) {
 			AiOcrResult ocrResult = aiOcrResultRepository.findByRoomId(roomId).orElse(null);
 			String resumeOcr = ocrResult != null ? ocrResult.getResumeOcr() : "";
 			String jobPostingOcr = ocrResult != null ? ocrResult.getJobPostingOcr() : "";
@@ -104,14 +116,9 @@ public class AiChatMessageService {
 				resumeOcr,
 				jobPostingOcr,
 				interview.getInterviewType().name().toLowerCase(),
-				interview.getCurrentQuestionCount()
+				interview.getCurrentQuestionCount() + 1  // 다음 질문 번호 전달 (실제 증가는 성공 후)
 			);
 		}
-
-		MessageType messageType = interviewId != null ? MessageType.INTERVIEW : MessageType.NORMAL;
-		AiChatInterview finalInterview = interview;
-
-		saveUserMessage(room, content, messageType, interview);
 
 		FastApiChatRequest request = new FastApiChatRequest(
 			model.name().toLowerCase(),
@@ -124,18 +131,41 @@ public class AiChatMessageService {
 
 		StringBuilder fullResponse = new StringBuilder();
 		AtomicBoolean hasError = new AtomicBoolean(false);
+		AtomicBoolean isFastApiError = new AtomicBoolean(false);  // FastAPI 에러 플래그 추가
 
 		return fastApiClient.streamChatResponse(request)
 			.doOnNext(chunk -> {
-				fullResponse.append(chunk);
+				// 에러 청크 감지
+				if (chunk.startsWith("[ERROR]")) {
+					isFastApiError.set(true);
+					hasError.set(true);
+
+					// [ERROR] 접두사 제거 후 fallback 메시지만 누적
+					String fallbackMessage = chunk.substring("[ERROR]".length());
+					fullResponse.append(fallbackMessage);
+
+					log.warn("FastAPI 에러 청크 감지: roomId={}, interviewId={}, fallback='{}'",
+						roomId, interviewId, fallbackMessage);
+				} else {
+					// 정상 청크
+					fullResponse.append(chunk);
+				}
+
 				log.debug("청크 수신: length={}", chunk.length());
 			})
+			.filter(chunk -> !chunk.startsWith("[ERROR]"))  // ← 에러 청크는 클라이언트에 전송하지 않음
 			.doOnComplete(() -> {
 				if (!hasError.get()) {
 					try {
 						// SecurityContext 복원
 						SecurityContextHolder.getContext().setAuthentication(currentAuth);
 
+						// 면접 모드이고 에러가 아닌 경우에만 질문 개수 증가
+						if (finalInterview != null && !isFastApiError.get()) {
+							finalInterview.incrementQuestionCount();
+							log.info("면접 질문 개수 증가: interviewId={}, count={}",
+								finalInterview.getId(), finalInterview.getCurrentQuestionCount());
+						}
 						saveAssistantMessage(room, fullResponse.toString(), model, messageType, finalInterview);
 						log.info("AI 챗봇 스트리밍 완료: roomId={}, totalLength={}",
 							LogSanitizer.sanitize(String.valueOf(roomId)),
@@ -149,13 +179,33 @@ public class AiChatMessageService {
 						// SecurityContext 정리 (메모리 누수 방지)
 						SecurityContextHolder.clearContext();
 					}
+				} else if (isFastApiError.get()) {
+					// FastAPI 에러 - fallback 메시지만 저장 (질문 개수 증가 안 함)
+					try {
+						SecurityContextHolder.getContext().setAuthentication(currentAuth);
+
+						Map<String, Object> metadata = new HashMap<>();
+						metadata.put("model", model.name());
+						metadata.put("fastapi_error", true);
+						metadata.put("error_type", "PARSE_FAILED");
+
+						saveAssistantMessage(room, fullResponse.toString(), metadata, messageType, finalInterview);
+
+						log.warn("FastAPI 에러 응답 저장 완료 (질문 개수 증가 안 함): roomId={}, interviewId={}, count={}",
+							roomId, interviewId,
+							finalInterview != null ? finalInterview.getCurrentQuestionCount() : null);
+					} catch (Exception e) {
+						log.error("FastAPI 에러 응답 저장 실패", e);
+					} finally {
+						SecurityContextHolder.clearContext();
+					}
 				}
 			})
 			.doOnError(e -> {
 				hasError.set(true);
 				log.error("AI 챗봇 스트리밍 실패: roomId={}", LogSanitizer.sanitize(String.valueOf(roomId)), e);
 
-				if (fullResponse.length() > 0) {
+				if (!fullResponse.isEmpty()) {
 					try {
 						// SecurityContext 복원
 						SecurityContextHolder.getContext().setAuthentication(currentAuth);
