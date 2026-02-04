@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import com.ktb3.devths.notification.domain.constant.NotificationCategory;
+import com.ktb3.devths.notification.domain.constant.NotificationType;
 import com.ktb3.devths.notification.domain.entity.Notification;
 
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
@@ -43,4 +45,17 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 		+ "AND n.isRead = false "
 		+ "AND n.isDeleted = false")
 	Long countUnreadByRecipientId(@Param("recipientId") Long recipientId);
+
+	@Modifying
+	@Query("UPDATE Notification n SET n.isRead = true "
+		+ "WHERE n.resourceId = :roomId "
+		+ "AND n.category = :category "
+		+ "AND n.type = :type "
+		+ "AND n.isRead = false "
+		+ "AND n.isDeleted = false")
+	int markAsReadByRoomIdAndCategoryAndType(
+		@Param("roomId") Long roomId,
+		@Param("category") NotificationCategory category,
+		@Param("type") NotificationType type
+	);
 }
