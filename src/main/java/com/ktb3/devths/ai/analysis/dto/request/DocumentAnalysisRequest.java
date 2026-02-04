@@ -22,7 +22,7 @@ public record DocumentAnalysisRequest(
 		Long fileId,
 		String s3Key,
 		String fileType,
-		@Size(min = 1, max = 2000)
+		@Size(max = 2000)
 		String text
 	) {
 		public boolean hasFileReference() {
