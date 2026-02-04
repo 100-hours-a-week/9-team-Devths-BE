@@ -1,0 +1,109 @@
+package com.ktb3.devths.auth.controller;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.ktb3.devths.auth.dto.internal.GoogleLoginResult;
+import com.ktb3.devths.auth.dto.internal.TokenPair;
+import com.ktb3.devths.auth.dto.request.GoogleLoginRequest;
+import com.ktb3.devths.auth.dto.response.GoogleLoginResponse;
+import com.ktb3.devths.auth.service.AuthService;
+import com.ktb3.devths.auth.service.JwtTokenService;
+import com.ktb3.devths.auth.util.CookieUtil;
+import com.ktb3.devths.global.exception.CustomException;
+import com.ktb3.devths.global.response.ApiResponse;
+import com.ktb3.devths.global.response.ErrorCode;
+import com.ktb3.devths.global.security.UserPrincipal;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+@RestController
+@RequestMapping("/api/auth")
+@RequiredArgsConstructor
+public class AuthController {
+	private final AuthService authService;
+	private final JwtTokenService jwtTokenService;
+
+	/**
+	 * Google OAuth2 로그인
+	 */
+	@PostMapping("/google")
+	public ResponseEntity<ApiResponse<GoogleLoginResponse>> googleLogin(
+		@Valid @RequestBody GoogleLoginRequest request,
+		HttpServletResponse response
+	) {
+		GoogleLoginResult result = authService.loginWithGoogle(request.authCode());
+
+		if (result.isRegistered()) {
+			// Access Token을 Authorization 헤더에 설정
+			response.setHeader("Authorization", "Bearer " + result.tokenPair().accessToken());
+
+			// Refresh Token을 HttpOnly Cookie로 설정
+			response.addCookie(CookieUtil.createRefreshTokenCookie(result.tokenPair().refreshToken()));
+		}
+
+		String message = result.isRegistered()
+			? "로그인에 성공하였습니다."
+			: "신규 유저입니다. 회원가입이 필요합니다.";
+
+		GoogleLoginResponse loginResponse = result.isRegistered()
+			? GoogleLoginResponse.registered(result.loginResponse())
+			: GoogleLoginResponse.newUser(result.email(), result.tempToken());
+
+		return ResponseEntity.ok()
+			.body(ApiResponse.success(message, loginResponse));
+	}
+
+	/**
+	 * 로그아웃
+	 */
+	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204")
+	@PostMapping("/logout")
+	public ResponseEntity<ApiResponse<Void>> logout(
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		HttpServletResponse response
+	) {
+		authService.logout(userPrincipal.getUserId());
+
+		// Refresh Token Cookie 삭제
+		response.addCookie(CookieUtil.clearRefreshTokenCookie());
+
+		return ResponseEntity.noContent().build();
+	}
+
+	/**
+	 * 토큰 재발급
+	 */
+	@PostMapping("/tokens")
+	public ResponseEntity<ApiResponse<Void>> refreshTokens(
+		HttpServletRequest request,
+		HttpServletResponse response
+	) {
+		// Cookie에서 Refresh Token 추출
+		String refreshToken = CookieUtil.getRefreshTokenFromCookies(request.getCookies());
+		if (refreshToken == null) {
+			throw new CustomException(ErrorCode.INVALID_REFRESH_TOKEN);
+		}
+
+		// 토큰 재발급
+		TokenPair newTokenPair = jwtTokenService.refreshTokens(refreshToken);
+
+		// Access Token을 Authorization 헤더에 설정
+		response.setHeader("Authorization", "Bearer " + newTokenPair.accessToken());
+
+		// Refresh Token을 HttpOnly Cookie로 설정
+		response.addCookie(CookieUtil.createRefreshTokenCookie(newTokenPair.refreshToken()));
+
+		return ResponseEntity.ok()
+			.body(ApiResponse.success("토큰 재발급에 성공하였습니다.", null));
+	}
+}
