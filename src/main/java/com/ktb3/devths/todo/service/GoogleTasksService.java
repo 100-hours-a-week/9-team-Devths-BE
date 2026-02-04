@@ -22,6 +22,8 @@ import com.ktb3.devths.auth.dto.internal.GoogleTokenResponse;
 import com.ktb3.devths.auth.service.GoogleOAuthService;
 import com.ktb3.devths.auth.service.TokenEncryptionService;
 import com.ktb3.devths.global.exception.CustomException;
+import com.ktb3.devths.global.ratelimit.domain.constant.ApiType;
+import com.ktb3.devths.global.ratelimit.service.RateLimitService;
 import com.ktb3.devths.global.response.ErrorCode;
 import com.ktb3.devths.user.domain.entity.SocialAccount;
 import com.ktb3.devths.user.repository.SocialAccountRepository;
@@ -39,6 +41,7 @@ public class GoogleTasksService {
 	private final SocialAccountRepository socialAccountRepository;
 	private final TokenEncryptionService tokenEncryptionService;
 	private final GoogleOAuthService googleOAuthService;
+	private final RateLimitService rateLimitService;
 
 	/**
 	 * Google Tasks 목록 조회
@@ -95,6 +98,8 @@ public class GoogleTasksService {
 	 */
 	@Transactional
 	public String createTask(Long userId, String title, String dueDate) {
+		rateLimitService.consumeToken(userId, ApiType.GOOGLE_TASKS);
+
 		try {
 			SocialAccount socialAccount = socialAccountRepository.findByUser_IdAndProvider(userId, "GOOGLE")
 				.orElseThrow(() -> new CustomException(ErrorCode.UNAUTHORIZED));
@@ -141,6 +146,8 @@ public class GoogleTasksService {
 	 */
 	@Transactional
 	public String updateTask(Long userId, String todoId, String title, String dueDate) {
+		rateLimitService.consumeToken(userId, ApiType.GOOGLE_TASKS);
+
 		try {
 			SocialAccount socialAccount = socialAccountRepository.findByUser_IdAndProvider(userId, "GOOGLE")
 				.orElseThrow(() -> new CustomException(ErrorCode.UNAUTHORIZED));
@@ -194,6 +201,8 @@ public class GoogleTasksService {
 	 */
 	@Transactional
 	public Task updateTaskStatus(Long userId, String todoId, boolean isCompleted) {
+		rateLimitService.consumeToken(userId, ApiType.GOOGLE_TASKS);
+
 		try {
 			SocialAccount socialAccount = socialAccountRepository.findByUser_IdAndProvider(userId, "GOOGLE")
 				.orElseThrow(() -> new CustomException(ErrorCode.UNAUTHORIZED));
@@ -245,6 +254,8 @@ public class GoogleTasksService {
 	 */
 	@Transactional
 	public void deleteTask(Long userId, String todoId) {
+		rateLimitService.consumeToken(userId, ApiType.GOOGLE_TASKS);
+
 		try {
 			SocialAccount socialAccount = socialAccountRepository.findByUser_IdAndProvider(userId, "GOOGLE")
 				.orElseThrow(() -> new CustomException(ErrorCode.UNAUTHORIZED));

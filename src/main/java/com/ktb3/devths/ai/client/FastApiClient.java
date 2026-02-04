@@ -18,6 +18,8 @@ import com.ktb3.devths.ai.chatbot.dto.request.FastApiChatRequest;
 import com.ktb3.devths.ai.chatbot.dto.request.FastApiInterviewEvaluationRequest;
 import com.ktb3.devths.global.config.properties.FastApiProperties;
 import com.ktb3.devths.global.exception.CustomException;
+import com.ktb3.devths.global.ratelimit.domain.constant.ApiType;
+import com.ktb3.devths.global.ratelimit.service.RateLimitService;
 import com.ktb3.devths.global.response.ErrorCode;
 import com.ktb3.devths.global.util.LogSanitizer;
 
@@ -34,8 +36,11 @@ public class FastApiClient {
 	private final WebClient webClient;
 	private final FastApiProperties fastApiProperties;
 	private final ObjectMapper objectMapper;
+	private final RateLimitService rateLimitService;
 
 	public FastApiAnalysisResponse requestAnalysis(FastApiAnalysisRequest request) {
+		rateLimitService.consumeToken(request.userId(), ApiType.FASTAPI_ANALYSIS);
+
 		try {
 			String url = fastApiProperties.getBaseUrl() + "/ai/text/extract";
 

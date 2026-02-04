@@ -36,6 +36,8 @@ import com.ktb3.devths.calendar.dto.internal.GoogleEventMapping;
 import com.ktb3.devths.calendar.dto.response.GoogleEventDetailResponse;
 import com.ktb3.devths.calendar.dto.response.GoogleEventListResponse;
 import com.ktb3.devths.global.exception.CustomException;
+import com.ktb3.devths.global.ratelimit.domain.constant.ApiType;
+import com.ktb3.devths.global.ratelimit.service.RateLimitService;
 import com.ktb3.devths.global.response.ErrorCode;
 import com.ktb3.devths.user.domain.entity.SocialAccount;
 import com.ktb3.devths.user.repository.SocialAccountRepository;
@@ -55,6 +57,7 @@ public class GoogleCalendarService {
 	private final TokenEncryptionService tokenEncryptionService;
 	private final GoogleOAuthService googleOAuthService;
 	private final ObjectMapper objectMapper;
+	private final RateLimitService rateLimitService;
 
 	/**
 	 * Google Calendar에 일정 추가
@@ -65,6 +68,8 @@ public class GoogleCalendarService {
 	 */
 	@Transactional
 	public String createEvent(Long userId, GoogleEventMapping mapping) {
+		rateLimitService.consumeToken(userId, ApiType.GOOGLE_CALENDAR);
+
 		try {
 			// 1. SocialAccount 조회
 			SocialAccount socialAccount = socialAccountRepository.findByUser_IdAndProvider(userId, "GOOGLE")
@@ -217,6 +222,8 @@ public class GoogleCalendarService {
 	 */
 	@Transactional
 	public String updateEvent(Long userId, String eventId, GoogleEventMapping mapping) {
+		rateLimitService.consumeToken(userId, ApiType.GOOGLE_CALENDAR);
+
 		try {
 			// 1. SocialAccount 조회
 			SocialAccount socialAccount = socialAccountRepository.findByUser_IdAndProvider(userId, "GOOGLE")
@@ -272,6 +279,8 @@ public class GoogleCalendarService {
 	 */
 	@Transactional
 	public void deleteEvent(Long userId, String eventId) {
+		rateLimitService.consumeToken(userId, ApiType.GOOGLE_CALENDAR);
+
 		try {
 			// 1. SocialAccount 조회
 			SocialAccount socialAccount = socialAccountRepository.findByUser_IdAndProvider(userId, "GOOGLE")

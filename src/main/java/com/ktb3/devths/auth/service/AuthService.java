@@ -13,6 +13,8 @@ import com.ktb3.devths.auth.dto.internal.GoogleTokenResponse;
 import com.ktb3.devths.auth.dto.internal.TokenPair;
 import com.ktb3.devths.auth.dto.response.LoginResponse;
 import com.ktb3.devths.global.exception.CustomException;
+import com.ktb3.devths.global.ratelimit.domain.constant.ApiType;
+import com.ktb3.devths.global.ratelimit.service.RateLimitService;
 import com.ktb3.devths.global.response.ErrorCode;
 import com.ktb3.devths.global.security.jwt.JwtTokenProvider;
 import com.ktb3.devths.user.domain.constant.Interests;
@@ -36,6 +38,7 @@ public class AuthService {
 	private final JwtTokenProvider jwtTokenProvider;
 	private final SocialAccountRepository socialAccountRepository;
 	private final UserInterestRepository userInterestRepository;
+	private final RateLimitService rateLimitService;
 
 	/**
 	 * Google OAuth2 로그인
@@ -72,13 +75,16 @@ public class AuthService {
 
 		User user = socialAccount.getUser();
 
-		// 4. 탈퇴 회원 확인
+		// 4. Rate Limit 체크 (기존 사용자만)
+		rateLimitService.consumeToken(user.getId(), ApiType.GOOGLE_OAUTH);
+
+		// 5. 탈퇴 회원 확인
 		if (user.isWithdraw()) {
 			log.warn("탈퇴한 회원 로그인 시도: userId={}", user.getId());
 			throw new CustomException(ErrorCode.WITHDRAWN_USER);
 		}
 
-		// 5. Google AT/RT 갱신 (암호화 후 SocialAccount 업데이트)
+		// 6. Google AT/RT 갱신 (암호화 후 SocialAccount 업데이트)
 		String encryptedGoogleAccessToken = tokenEncryptionService.encrypt(googleTokenResponse.accessToken());
 		String encryptedGoogleRefreshToken = googleTokenResponse.refreshToken() != null
 			? tokenEncryptionService.encrypt(googleTokenResponse.refreshToken())
@@ -89,7 +95,7 @@ public class AuthService {
 
 		socialAccount.updateTokens(encryptedGoogleAccessToken, encryptedGoogleRefreshToken, googleTokenExpiresAt);
 
-		// 6. 서비스 AT/RT 발급
+		// 7. 서비스 AT/RT 발급
 		TokenPair tokenPair = jwtTokenService.issueTokenPair(user);
 
 		// 7. UserInterest 조회
