@@ -97,6 +97,20 @@ fastapi:
   poll-interval: 2000
   max-poll-attempts: 50
 
+ratelimit:
+  google-calendar:
+    bucket-capacity: ${RATELIMIT_GOOGLE_CALENDAR:100}
+    enabled: true
+  google-tasks:
+    bucket-capacity: ${RATELIMIT_GOOGLE_TASKS:100}
+    enabled: true
+  fastapi:
+    bucket-capacity: ${RATELIMIT_FASTAPI:10}
+    enabled: true
+  google-oauth:
+    bucket-capacity: ${RATELIMIT_GOOGLE_OAUTH:50}
+    enabled: true
+
 async:
   core-pool-size: 10
   max-pool-size: 20
