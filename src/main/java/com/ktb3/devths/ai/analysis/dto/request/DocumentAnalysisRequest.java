@@ -2,6 +2,7 @@ package com.ktb3.devths.ai.analysis.dto.request;
 
 import com.ktb3.devths.ai.constant.AiModel;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -10,9 +11,11 @@ public record DocumentAnalysisRequest(
 	AiModel model,
 
 	@NotNull(message = "이력서 정보는 필수입니다")
+	@Valid
 	DocumentInfo resume,
 
 	@NotNull(message = "채용공고 정보는 필수입니다")
+	@Valid
 	DocumentInfo jobPost
 ) {
 	public record DocumentInfo(
