@@ -7,6 +7,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ktb3.devths.ai.chatbot.domain.constant.MessageType;
 import com.ktb3.devths.ai.chatbot.domain.entity.AiChatMessage;
 import com.ktb3.devths.ai.chatbot.domain.entity.AiChatRoom;
 import com.ktb3.devths.ai.chatbot.dto.response.AiChatMessageListResponse;
@@ -16,6 +17,7 @@ import com.ktb3.devths.ai.chatbot.repository.AiChatMessageRepository;
 import com.ktb3.devths.ai.chatbot.repository.AiChatRoomRepository;
 import com.ktb3.devths.global.exception.CustomException;
 import com.ktb3.devths.global.response.ErrorCode;
+import com.ktb3.devths.notification.service.NotificationService;
 import com.ktb3.devths.user.domain.entity.User;
 import com.ktb3.devths.user.repository.UserRepository;
 
@@ -32,6 +34,7 @@ public class AiChatRoomService {
 	private final AiChatRoomRepository aiChatRoomRepository;
 	private final AiChatMessageRepository aiChatMessageRepository;
 	private final UserRepository userRepository;
+	private final NotificationService notificationService;
 
 	@Transactional
 	public AiChatRoomCreateResponse createChatRoom(Long userId) {
@@ -64,7 +67,7 @@ public class AiChatRoomService {
 		chatRoom.delete();
 	}
 
-	@Transactional(readOnly = true)
+	@Transactional
 	public AiChatMessageListResponse getChatMessages(Long userId, Long roomId, Integer size, Long lastId) {
 		AiChatRoom chatRoom = aiChatRoomRepository.findByIdAndIsDeletedFalse(roomId)
 			.orElseThrow(() -> new CustomException(ErrorCode.AI_CHATROOM_NOT_FOUND));
@@ -79,6 +82,13 @@ public class AiChatRoomService {
 		List<AiChatMessage> messages = (lastId == null)
 			? aiChatMessageRepository.findByRoomIdOrderByIdDesc(roomId, pageable)
 			: aiChatMessageRepository.findByRoomIdAndIdLessThanOrderByIdDesc(roomId, lastId, pageable);
+
+		// 분석 완료 알림 읽음 처리
+		// 조건: 첫 페이지 조회 + 메시지 1개 + REPORT 타입
+		if (lastId == null && messages.size() == 1
+			&& messages.getFirst().getType() == MessageType.REPORT) {
+			notificationService.markReportNotificationAsReadByRoomId(roomId);
+		}
 
 		return AiChatMessageListResponse.of(messages, pageSize);
 	}

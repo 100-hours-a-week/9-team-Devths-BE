@@ -74,4 +74,16 @@ public class NotificationService {
 		Long count = notificationRepository.countUnreadByRecipientId(userId);
 		return UnreadCountResponse.of(count);
 	}
+
+	@Transactional
+	public void markReportNotificationAsReadByRoomId(Long roomId) {
+		int updated = notificationRepository.markAsReadByRoomIdAndCategoryAndType(
+			roomId,
+			NotificationCategory.AI,
+			NotificationType.REPORT
+		);
+		if (updated > 0) {
+			log.info("채팅방 입장으로 알림 읽음 처리");
+		}
+	}
 }
