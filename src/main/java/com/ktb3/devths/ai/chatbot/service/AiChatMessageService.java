@@ -79,6 +79,7 @@ public class AiChatMessageService {
 
 		AiChatInterview interview = null;
 		FastApiChatContext context = FastApiChatContext.createNormalMode();
+		boolean shouldGenerateNextQuestion = true;
 
 		if (interviewId != null) {
 			interview = aiChatInterviewRepository.findById(interviewId)
@@ -92,7 +93,20 @@ public class AiChatMessageService {
 			if (interview.getCurrentQuestionCount() > 5) {
 				throw new CustomException(ErrorCode.INTERVIEW_COMPLETED_EVALUATION_REQUIRED);
 			}
+			shouldGenerateNextQuestion = interview.getCurrentQuestionCount() < 5;
+		}
 
+		MessageType messageType = interviewId != null ? MessageType.INTERVIEW : MessageType.NORMAL;
+		AiChatInterview finalInterview = interview;
+
+		saveUserMessage(room, content, messageType, interview);
+
+		if (interviewId != null && !shouldGenerateNextQuestion) {
+			SecurityContextHolder.clearContext();
+			return Flux.empty();
+		}
+
+		if (interviewId != null) {
 			AiOcrResult ocrResult = aiOcrResultRepository.findByRoomId(roomId).orElse(null);
 			String resumeOcr = ocrResult != null ? ocrResult.getResumeOcr() : "";
 			String jobPostingOcr = ocrResult != null ? ocrResult.getJobPostingOcr() : "";
@@ -105,11 +119,6 @@ public class AiChatMessageService {
 				interview.getCurrentQuestionCount() + 1  // 다음 질문 번호 전달 (실제 증가는 성공 후)
 			);
 		}
-
-		MessageType messageType = interviewId != null ? MessageType.INTERVIEW : MessageType.NORMAL;
-		AiChatInterview finalInterview = interview;
-
-		saveUserMessage(room, content, messageType, interview);
 
 		FastApiChatRequest request = new FastApiChatRequest(
 			model.name().toLowerCase(),
