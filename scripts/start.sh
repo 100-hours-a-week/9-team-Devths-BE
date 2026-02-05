@@ -7,16 +7,8 @@ source ${ABSDIR}/profile.sh
 IDLE_PROFILE=$(find_idle_profile)
 IDLE_PORT=$(find_idle_port)
 
-# JMX 포트 설정 (CloudWatch Agent 메트릭 수집용)
-if [ "$IDLE_PORT" == "8080" ]; then
-    JMX_PORT=9010
-else
-    JMX_PORT=9011
-fi
-
 echo "> IDLE_PROFILE: $IDLE_PROFILE"
 echo "> IDLE_PORT: $IDLE_PORT"
-echo "> JMX_PORT: $JMX_PORT"
 
 # 1. 새 배포를 시작하기 전, IDLE 포트에서 돌고 있는 애플리케이션이 있다면 종료 (혹시 모를 충돌 방지)
 echo "> $IDLE_PORT 포트에서 구동 중인 애플리케이션 pid 확인"
@@ -100,12 +92,6 @@ nohup java \
   -Dspring.config.location=classpath:/application.yml \
   -Dspring.profiles.active=$IDLE_PROFILE,$SPRING_PROFILE \
   -Dserver.port=$IDLE_PORT \
-  -Dcom.sun.management.jmxremote \
-  -Dcom.sun.management.jmxremote.port=$JMX_PORT \
-  -Dcom.sun.management.jmxremote.rmi.port=$JMX_PORT \
-  -Dcom.sun.management.jmxremote.authenticate=false \
-  -Dcom.sun.management.jmxremote.ssl=false \
-  -Dcom.sun.management.jmxremote.local.only=false \
   -Djava.rmi.server.hostname=127.0.0.1 \
   -jar $BUILD_JAR >> $LOG_FILE 2>&1 &
 
