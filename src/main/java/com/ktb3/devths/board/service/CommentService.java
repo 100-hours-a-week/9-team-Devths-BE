@@ -11,6 +11,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ktb3.devths.board.domain.entity.Comment;
+import com.ktb3.devths.board.domain.entity.Post;
+import com.ktb3.devths.board.dto.request.CommentCreateRequest;
+import com.ktb3.devths.board.dto.response.CommentCreateResponse;
 import com.ktb3.devths.board.dto.response.CommentListResponse;
 import com.ktb3.devths.board.repository.CommentRepository;
 import com.ktb3.devths.board.repository.PostRepository;
@@ -20,6 +23,8 @@ import com.ktb3.devths.global.storage.domain.constant.RefType;
 import com.ktb3.devths.global.storage.domain.entity.S3Attachment;
 import com.ktb3.devths.global.storage.repository.S3AttachmentRepository;
 import com.ktb3.devths.global.storage.service.S3StorageService;
+import com.ktb3.devths.user.domain.entity.User;
+import com.ktb3.devths.user.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -32,8 +37,31 @@ public class CommentService {
 
 	private final CommentRepository commentRepository;
 	private final PostRepository postRepository;
+	private final UserRepository userRepository;
 	private final S3AttachmentRepository s3AttachmentRepository;
 	private final S3StorageService s3StorageService;
+
+	@Transactional
+	public CommentCreateResponse createComment(Long userId, Long postId, CommentCreateRequest request) {
+		User user = userRepository.findByIdAndIsWithdrawFalse(userId)
+			.orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+		Post post = postRepository.findByIdAndIsDeletedFalseForUpdate(postId)
+			.orElseThrow(() -> new CustomException(ErrorCode.POST_NOT_FOUND));
+
+		Comment parent = resolveParent(request.parentId(), postId);
+
+		Comment comment = commentRepository.save(Comment.builder()
+			.post(post)
+			.user(user)
+			.parent(parent)
+			.content(request.content())
+			.build());
+
+		post.incrementCommentCount();
+
+		return CommentCreateResponse.from(comment);
+	}
 
 	@Transactional(readOnly = true)
 	public CommentListResponse getCommentList(Long postId, Integer size, Long lastId) {
@@ -58,6 +86,25 @@ public class CommentService {
 		Map<Long, S3Attachment> profileImageMap = buildProfileImageMap(userIds);
 
 		return CommentListResponse.of(comments, pageSize, profileImageMap, s3StorageService);
+	}
+
+	private Comment resolveParent(Long parentId, Long postId) {
+		if (parentId == null) {
+			return null;
+		}
+
+		Comment parent = commentRepository.findById(parentId)
+			.orElseThrow(() -> new CustomException(ErrorCode.INVALID_REQUEST));
+
+		if (!parent.getPost().getId().equals(postId)) {
+			throw new CustomException(ErrorCode.INVALID_REQUEST);
+		}
+
+		if (parent.isDeleted()) {
+			throw new CustomException(ErrorCode.INVALID_REQUEST);
+		}
+
+		return parent;
 	}
 
 	private void validatePostExists(Long postId) {

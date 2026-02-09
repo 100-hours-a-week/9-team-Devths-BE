@@ -1,18 +1,24 @@
 package com.ktb3.devths.board.controller;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ktb3.devths.board.dto.request.CommentCreateRequest;
+import com.ktb3.devths.board.dto.response.CommentCreateResponse;
 import com.ktb3.devths.board.dto.response.CommentListResponse;
 import com.ktb3.devths.board.service.CommentService;
 import com.ktb3.devths.global.response.ApiResponse;
 import com.ktb3.devths.global.security.UserPrincipal;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 @RestController
@@ -21,6 +27,21 @@ import lombok.RequiredArgsConstructor;
 public class CommentController {
 
 	private final CommentService commentService;
+
+	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201")
+	@PostMapping
+	public ResponseEntity<ApiResponse<CommentCreateResponse>> createComment(
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		@PathVariable Long postId,
+		@Valid @RequestBody CommentCreateRequest request
+	) {
+		CommentCreateResponse response = commentService.createComment(
+			userPrincipal.getUserId(), postId, request);
+
+		return ResponseEntity.status(HttpStatus.CREATED).body(
+			ApiResponse.success("댓글이 성공적으로 등록되었습니다.", response)
+		);
+	}
 
 	@GetMapping
 	public ResponseEntity<ApiResponse<CommentListResponse>> getComments(
