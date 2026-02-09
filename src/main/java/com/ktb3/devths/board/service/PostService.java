@@ -31,7 +31,6 @@ import com.ktb3.devths.global.storage.domain.constant.RefType;
 import com.ktb3.devths.global.storage.domain.entity.S3Attachment;
 import com.ktb3.devths.global.storage.repository.S3AttachmentRepository;
 import com.ktb3.devths.global.storage.service.S3StorageService;
-import com.ktb3.devths.global.util.LogSanitizer;
 import com.ktb3.devths.user.domain.constant.Interests;
 import com.ktb3.devths.user.domain.entity.User;
 import com.ktb3.devths.user.domain.entity.UserInterest;
@@ -102,10 +101,6 @@ public class PostService {
 
 		String keyword = (tag != null) ? tag.strip() : null;
 		boolean hasKeyword = keyword != null && !keyword.isEmpty();
-
-		if (hasKeyword) {
-			log.info("게시글 검색 키워드: {}", LogSanitizer.sanitize(keyword));
-		}
 
 		List<Post> posts = fetchPosts(keyword, hasKeyword, lastId, pageable);
 
