@@ -12,10 +12,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ktb3.devths.auth.dto.internal.TokenPair;
-import com.ktb3.devths.board.domain.entity.Post;
-import com.ktb3.devths.board.repository.PostRepository;
 import com.ktb3.devths.auth.service.JwtTokenService;
 import com.ktb3.devths.auth.service.TokenEncryptionService;
+import com.ktb3.devths.board.domain.entity.Post;
+import com.ktb3.devths.board.repository.PostRepository;
 import com.ktb3.devths.global.exception.CustomException;
 import com.ktb3.devths.global.response.ErrorCode;
 import com.ktb3.devths.global.security.jwt.JwtTokenProvider;
@@ -34,6 +34,7 @@ import com.ktb3.devths.user.dto.request.UserSignupRequest;
 import com.ktb3.devths.user.dto.request.UserUpdateRequest;
 import com.ktb3.devths.user.dto.response.MyPostListResponse;
 import com.ktb3.devths.user.dto.response.UserMeResponse;
+import com.ktb3.devths.user.dto.response.UserProfileResponse;
 import com.ktb3.devths.user.dto.response.UserSignupResponse;
 import com.ktb3.devths.user.dto.response.UserUpdateResponse;
 import com.ktb3.devths.user.repository.SocialAccountRepository;
@@ -261,6 +262,32 @@ public class UserService {
 			: postRepository.findMyPostsNotDeletedAfterCursor(userId, lastId, pageable);
 
 		return MyPostListResponse.of(posts, pageSize);
+	}
+
+	@Transactional(readOnly = true)
+	public UserProfileResponse getUserProfile(Long requesterId, Long targetUserId) { //requesterId -> 추후 isFollowing 계산 시 필요
+		User user = userRepository.findByIdAndIsWithdrawFalse(targetUserId)
+			.orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+		List<String> interests = userInterestRepository.findInterestsByUserId(targetUserId).stream()
+			.map(Interests::getDisplayName)
+			.toList();
+
+		UserSignupResponse.ProfileImage profileImage = s3AttachmentRepository
+			.findTopByRefTypeAndRefIdAndIsDeletedFalseOrderByCreatedAtDesc(RefType.USER, targetUserId)
+			.map(attachment -> new UserSignupResponse.ProfileImage(
+				attachment.getId(),
+				s3StorageService.getPublicUrl(attachment.getS3Key())
+			))
+			.orElse(null);
+
+		return UserProfileResponse.of(
+			user.getId(),
+			user.getNickname(),
+			profileImage,
+			interests,
+			false
+		);
 	}
 
 	private Interests parseInterest(String value) {
