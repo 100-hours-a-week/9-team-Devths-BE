@@ -23,6 +23,8 @@ public interface S3AttachmentRepository extends JpaRepository<S3Attachment, Long
 		@Param("refIds") List<Long> refIds
 	);
 
+	List<S3Attachment> findByRefTypeAndRefIdAndIsDeletedFalseOrderBySortOrderAsc(RefType refType, Long refId);
+
 	@Query("SELECT s FROM S3Attachment s JOIN FETCH s.user WHERE s.id = :id")
 	Optional<S3Attachment> findByIdWithUser(@Param("id") Long id);
 }

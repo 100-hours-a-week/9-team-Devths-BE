@@ -3,10 +3,12 @@ package com.ktb3.devths.board.controller;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ktb3.devths.board.dto.response.PostDetailResponse;
 import com.ktb3.devths.board.dto.response.PostListResponse;
 import com.ktb3.devths.board.service.PostService;
 import com.ktb3.devths.global.response.ApiResponse;
@@ -32,6 +34,18 @@ public class PostController {
 
 		return ResponseEntity.ok(
 			ApiResponse.success("게시글 목록을 성공적으로 조회하였습니다.", response)
+		);
+	}
+
+	@GetMapping("/{postId}")
+	public ResponseEntity<ApiResponse<PostDetailResponse>> getPost(
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		@PathVariable Long postId
+	) {
+		PostDetailResponse response = postService.getPostDetail(userPrincipal.getUserId(), postId);
+
+		return ResponseEntity.ok(
+			ApiResponse.success("게시글을 성공적으로 조회하였습니다.", response)
 		);
 	}
 }

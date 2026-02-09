@@ -47,6 +47,7 @@ public enum ErrorCode {
 	INTERVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "면접을 찾을 수 없습니다"),
 	EVENT_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 일정을 찾을 수 없습니다"),
 	TODO_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 할 일을 찾을 수 없습니다"),
+	POST_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 게시글을 찾을 수 없습니다"),
 
 	// 409 Conflict
 	DUPLICATE_EMAIL(HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다"),
