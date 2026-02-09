@@ -39,4 +39,26 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
 		@Param("lastId") Long lastId,
 		Pageable pageable
 	);
+
+	@Query("SELECT c FROM Comment c "
+		+ "JOIN FETCH c.post "
+		+ "WHERE c.user.id = :userId "
+		+ "AND c.isDeleted = false "
+		+ "ORDER BY c.id DESC")
+	List<Comment> findMyCommentsNotDeleted(
+		@Param("userId") Long userId,
+		Pageable pageable
+	);
+
+	@Query("SELECT c FROM Comment c "
+		+ "JOIN FETCH c.post "
+		+ "WHERE c.user.id = :userId "
+		+ "AND c.isDeleted = false "
+		+ "AND c.id < :lastId "
+		+ "ORDER BY c.id DESC")
+	List<Comment> findMyCommentsNotDeletedAfterCursor(
+		@Param("userId") Long userId,
+		@Param("lastId") Long lastId,
+		Pageable pageable
+	);
 }
