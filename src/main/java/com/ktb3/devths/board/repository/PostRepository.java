@@ -35,6 +35,23 @@ public interface PostRepository extends JpaRepository<Post, Long> {
 	List<Post> findPostsNotDeleted(Pageable pageable);
 
 	@Query("SELECT p FROM Post p "
+		+ "WHERE p.user.id = :userId "
+		+ "AND p.isDeleted = false "
+		+ "ORDER BY p.id DESC")
+	List<Post> findMyPostsNotDeleted(@Param("userId") Long userId, Pageable pageable);
+
+	@Query("SELECT p FROM Post p "
+		+ "WHERE p.user.id = :userId "
+		+ "AND p.isDeleted = false "
+		+ "AND p.id < :lastId "
+		+ "ORDER BY p.id DESC")
+	List<Post> findMyPostsNotDeletedAfterCursor(
+		@Param("userId") Long userId,
+		@Param("lastId") Long lastId,
+		Pageable pageable
+	);
+
+	@Query("SELECT p FROM Post p "
 		+ "JOIN FETCH p.user "
 		+ "WHERE p.isDeleted = false "
 		+ "AND p.user.isWithdraw = false "
