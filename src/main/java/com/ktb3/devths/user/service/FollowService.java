@@ -22,6 +22,7 @@ import com.ktb3.devths.user.dto.response.FollowResponse;
 import com.ktb3.devths.user.dto.response.FollowerListResponse;
 import com.ktb3.devths.user.dto.response.FollowerSummaryResponse;
 import com.ktb3.devths.user.dto.response.FollowingListResponse;
+import com.ktb3.devths.user.event.UserEventPublisher;
 import com.ktb3.devths.user.repository.FollowRepository;
 import com.ktb3.devths.user.repository.UserRepository;
 import com.ktb3.devths.user.repository.UserStatRepository;
@@ -42,6 +43,7 @@ public class FollowService {
 	private final UserStatRepository userStatRepository;
 	private final S3AttachmentRepository s3AttachmentRepository;
 	private final S3StorageService s3StorageService;
+	private final UserEventPublisher userEventPublisher;
 
 	@Transactional
 	public FollowResponse follow(Long followerId, Long followingId) {
@@ -92,6 +94,7 @@ public class FollowService {
 		UserStat followerStat = followerId < followingId ? firstStat : secondStat;
 
 		log.info("팔로우 성공: followerId={}, followingId={}", followerId, followingId);
+		userEventPublisher.publishFollowed(followerId, followingId, followerUser.getNickname());
 
 		return FollowResponse.of(followingId, followerStat.getFollowingCount());
 	}
