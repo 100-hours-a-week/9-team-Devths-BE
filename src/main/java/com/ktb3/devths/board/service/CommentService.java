@@ -63,16 +63,16 @@ public class CommentService {
 			.build());
 
 		post.incrementCommentCount();
-		if (!post.getUser().getId().equals(userId)) {
-			boardEventPublisher.publishPostCommentCreated(
-				comment.getId(),
-				post.getId(),
-				post.getUser().getId(),
-				userId,
-				user.getNickname(),
-				buildPreviewContent(request.content())
-			);
-		}
+		boardEventPublisher.publishPostCommentCreated(
+			comment.getId(),
+			post.getId(),
+			post.getUser().getId(),
+			parent != null ? parent.getId() : null,
+			parent != null ? parent.getUser().getId() : null,
+			userId,
+			user.getNickname(),
+			buildPreviewContent(request.content())
+		);
 
 		return CommentCreateResponse.from(comment);
 	}

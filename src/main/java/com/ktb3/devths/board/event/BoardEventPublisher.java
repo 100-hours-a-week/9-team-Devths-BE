@@ -15,6 +15,8 @@ public class BoardEventPublisher {
 		Long commentId,
 		Long postId,
 		Long postAuthorId,
+		Long parentCommentId,
+		Long parentCommentAuthorId,
 		Long commenterId,
 		String commenterNickname,
 		String previewContent
@@ -24,6 +26,8 @@ public class BoardEventPublisher {
 				commentId,
 				postId,
 				postAuthorId,
+				parentCommentId,
+				parentCommentAuthorId,
 				commenterId,
 				commenterNickname,
 				previewContent
