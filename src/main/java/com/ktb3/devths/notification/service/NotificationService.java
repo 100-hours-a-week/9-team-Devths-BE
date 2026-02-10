@@ -83,7 +83,7 @@ public class NotificationService {
 			.category(NotificationCategory.BOARD)
 			.type(NotificationType.COMMENT)
 			.content(senderNickname + "님이 회원님의 게시물에 댓글을 남겼습니다.")
-			.targetPath("/posts/" + postId)
+			.targetPath("/board/" + postId)
 			.resourceId(postId)
 			.isRead(false)
 			.build();
@@ -114,7 +114,7 @@ public class NotificationService {
 			.category(NotificationCategory.BOARD)
 			.type(NotificationType.COMMENT)
 			.content(senderNickname + "님이 회원님의 댓글에 답글을 남겼습니다.")
-			.targetPath("/posts/" + postId)
+			.targetPath("/board/" + postId)
 			.resourceId(postId)
 			.isRead(false)
 			.build();
