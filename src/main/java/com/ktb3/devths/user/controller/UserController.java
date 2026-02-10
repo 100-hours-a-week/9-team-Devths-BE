@@ -129,6 +129,17 @@ public class UserController {
 	}
 
 	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204")
+	@DeleteMapping("/{userId}/followers")
+	public ResponseEntity<Void> unfollowUser(
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		@PathVariable Long userId
+	) {
+		followService.unfollow(userPrincipal.getUserId(), userId);
+
+		return ResponseEntity.noContent().build();
+	}
+
+	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204")
 	@DeleteMapping
 	public ResponseEntity<Void> withdraw(
 		@AuthenticationPrincipal UserPrincipal userPrincipal,

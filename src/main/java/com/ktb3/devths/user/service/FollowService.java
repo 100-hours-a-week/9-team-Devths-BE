@@ -79,6 +79,36 @@ public class FollowService {
 		return FollowResponse.of(followingId, followerStat.getFollowingCount());
 	}
 
+	@Transactional
+	public void unfollow(Long followerId, Long followingId) {
+		if (followerId.equals(followingId)) {
+			throw new CustomException(ErrorCode.SELF_UNFOLLOW_NOT_ALLOWED);
+		}
+
+		userRepository.findByIdAndIsWithdrawFalse(followingId)
+			.orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+		Follow follow = followRepository.findByFollowerIdAndFollowingId(followerId, followingId)
+			.orElse(null);
+
+		if (follow == null) {
+			return;
+		}
+
+		followRepository.delete(follow);
+
+		// 데드락 방지: userId 순서로 잠금
+		if (followerId < followingId) {
+			getOrCreateUserStatForUpdate(followerId).decrementFollowingCount();
+			getOrCreateUserStatForUpdate(followingId).decrementFollowerCount();
+		} else {
+			getOrCreateUserStatForUpdate(followingId).decrementFollowerCount();
+			getOrCreateUserStatForUpdate(followerId).decrementFollowingCount();
+		}
+
+		log.info("언팔로우 성공: followerId={}, followingId={}", followerId, followingId);
+	}
+
 	private UserStat getOrCreateUserStat(Long userId) {
 		return userStatRepository.findByUserId(userId)
 			.orElseGet(() -> {
@@ -88,7 +118,14 @@ public class FollowService {
 	}
 
 	private UserStat getOrCreateUserStatForUpdate(User user) {
-		return userStatRepository.findByUserIdForUpdate(user.getId())
-			.orElseGet(() -> userStatRepository.save(UserStat.builder().user(user).build()));
+		return getOrCreateUserStatForUpdate(user.getId());
+	}
+
+	private UserStat getOrCreateUserStatForUpdate(Long userId) {
+		return userStatRepository.findByUserIdForUpdate(userId)
+			.orElseGet(() -> {
+				User user = userRepository.getReferenceById(userId);
+				return userStatRepository.save(UserStat.builder().user(user).build());
+			});
 	}
 }
