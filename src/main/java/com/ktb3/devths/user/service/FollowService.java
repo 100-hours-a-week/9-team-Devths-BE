@@ -1,7 +1,9 @@
 package com.ktb3.devths.user.service;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.springframework.dao.DataIntegrityViolationException;
@@ -153,13 +155,12 @@ public class FollowService {
 			? new HashSet<>()
 			: new HashSet<>(followRepository.findFollowingIdsByFollowerIdAndFollowingIdIn(userId, followerUserIds));
 
+		Map<Long, String> profileImageUrlMap = buildProfileImageUrlMap(followerUserIds);
+
 		List<FollowerSummaryResponse> followers = actualFollows.stream()
 			.map(f -> {
 				User follower = f.getFollower();
-				String profileImageUrl = s3AttachmentRepository
-					.findTopByRefTypeAndRefIdAndIsDeletedFalseOrderByCreatedAtDesc(RefType.USER, follower.getId())
-					.map(attachment -> s3StorageService.getPublicUrl(attachment.getS3Key()))
-					.orElse(null);
+				String profileImageUrl = profileImageUrlMap.get(follower.getId());
 
 				return new FollowerSummaryResponse(
 					f.getId(),
@@ -194,13 +195,16 @@ public class FollowService {
 			? follows.subList(0, pageSize)
 			: follows;
 
+		List<Long> followingUserIds = actualFollows.stream()
+			.map(f -> f.getFollowing().getId())
+			.toList();
+
+		Map<Long, String> profileImageUrlMap = buildProfileImageUrlMap(followingUserIds);
+
 		List<FollowerSummaryResponse> followings = actualFollows.stream()
 			.map(f -> {
 				User following = f.getFollowing();
-				String profileImageUrl = s3AttachmentRepository
-					.findTopByRefTypeAndRefIdAndIsDeletedFalseOrderByCreatedAtDesc(RefType.USER, following.getId())
-					.map(attachment -> s3StorageService.getPublicUrl(attachment.getS3Key()))
-					.orElse(null);
+				String profileImageUrl = profileImageUrlMap.get(following.getId());
 
 				return new FollowerSummaryResponse(
 					f.getId(),
@@ -235,5 +239,20 @@ public class FollowService {
 				User user = userRepository.getReferenceById(userId);
 				return userStatRepository.save(UserStat.builder().user(user).build());
 			});
+	}
+
+	private Map<Long, String> buildProfileImageUrlMap(List<Long> userIds) {
+		if (userIds.isEmpty()) {
+			return Map.of();
+		}
+
+		Map<Long, String> profileImageUrlMap = new HashMap<>();
+		s3AttachmentRepository.findByRefTypeAndRefIdInAndIsDeletedFalse(RefType.USER, userIds)
+			.forEach(attachment -> profileImageUrlMap.putIfAbsent(
+				attachment.getRefId(),
+				s3StorageService.getPublicUrl(attachment.getS3Key())
+			));
+
+		return profileImageUrlMap;
 	}
 }
