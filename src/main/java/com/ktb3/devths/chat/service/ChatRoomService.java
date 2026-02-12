@@ -14,9 +14,11 @@ import com.ktb3.devths.chat.domain.constant.ChatRoomTypes;
 import com.ktb3.devths.chat.domain.entity.ChatMember;
 import com.ktb3.devths.chat.domain.entity.ChatPrivateRoom;
 import com.ktb3.devths.chat.domain.entity.ChatRoom;
+import com.ktb3.devths.chat.dto.request.ChatRoomUpdateRequest;
 import com.ktb3.devths.chat.dto.response.ChatRoomDetailResponse;
 import com.ktb3.devths.chat.dto.response.ChatRoomListResponse;
 import com.ktb3.devths.chat.dto.response.ChatRoomSummaryResponse;
+import com.ktb3.devths.chat.dto.response.ChatRoomUpdateResponse;
 import com.ktb3.devths.chat.dto.response.PrivateChatRoomCreateResponse;
 import com.ktb3.devths.chat.repository.ChatMemberRepository;
 import com.ktb3.devths.chat.repository.ChatPrivateRoomRepository;
@@ -196,6 +198,27 @@ public class ChatRoomService {
 			chatRoom.getCreatedAt(),
 			recentImages
 		);
+	}
+
+	@Transactional
+	public ChatRoomUpdateResponse updateChatRoom(Long userId, Long roomId, ChatRoomUpdateRequest request) {
+		ChatRoom chatRoom = chatRoomRepository.findByIdAndIsDeletedFalse(roomId)
+			.orElseThrow(() -> new CustomException(ErrorCode.CHATROOM_NOT_FOUND));
+
+		ChatMember member = chatMemberRepository.findByChatRoomIdAndUserId(roomId, userId)
+			.orElseThrow(() -> new CustomException(ErrorCode.CHATROOM_ACCESS_DENIED));
+
+		if (request.roomName() != null && chatRoom.getType() == ChatRoomTypes.PRIVATE) {
+			throw new CustomException(ErrorCode.INVALID_REQUEST);
+		}
+
+		if (request.roomName() != null) {
+			member.updateRoomName(request.roomName());
+		}
+
+		member.updateAlarmOn(request.isAlarmOn());
+
+		return new ChatRoomUpdateResponse(chatRoom.getId(), member.getRoomName());
 	}
 
 	private String generateUniqueInviteCode() {

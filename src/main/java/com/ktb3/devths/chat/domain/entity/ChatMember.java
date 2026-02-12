@@ -62,4 +62,12 @@ public class ChatMember {
 	@Column(name = "joined_at", nullable = false)
 	@CreatedDate
 	private LocalDateTime joinedAt;
+
+	public void updateRoomName(String roomName) {
+		this.roomName = roomName;
+	}
+
+	public void updateAlarmOn(boolean isAlarmOn) {
+		this.isAlarmOn = isAlarmOn;
+	}
 }

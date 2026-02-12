@@ -8,14 +8,17 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ktb3.devths.chat.dto.request.ChatRoomUpdateRequest;
 import com.ktb3.devths.chat.dto.request.PrivateChatRoomCreateRequest;
 import com.ktb3.devths.chat.dto.response.ChatRoomDetailResponse;
 import com.ktb3.devths.chat.dto.response.ChatRoomListResponse;
+import com.ktb3.devths.chat.dto.response.ChatRoomUpdateResponse;
 import com.ktb3.devths.chat.dto.response.PrivateChatRoomCreateResponse;
 import com.ktb3.devths.chat.service.ChatRoomService;
 import com.ktb3.devths.global.response.ApiResponse;
@@ -59,6 +62,21 @@ public class ChatRoomController {
 		);
 
 		return ResponseEntity.ok(ApiResponse.success("채팅방 상세 정보를 성공적으로 조회하였습니다.", response));
+	}
+
+	@PutMapping("/{roomId}")
+	public ResponseEntity<ApiResponse<ChatRoomUpdateResponse>> updateChatRoom(
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		@PathVariable Long roomId,
+		@Valid @RequestBody ChatRoomUpdateRequest request
+	) {
+		ChatRoomUpdateResponse response = chatRoomService.updateChatRoom(
+			userPrincipal.getUserId(),
+			roomId,
+			request
+		);
+
+		return ResponseEntity.ok(ApiResponse.success("채팅방 정보가 성공적으로 수정되었습니다.", response));
 	}
 
 	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201")
