@@ -47,6 +47,6 @@ if [ ! -f "$REPOSITORY/docker-compose.yml" ]; then
 fi
 
 # docker-compose 실행 (detached mode)
-docker-compose up -d
+docker compose up -d
 
 echo "> 배포 완료. Health Check 대기 중..."
