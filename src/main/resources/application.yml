@@ -85,6 +85,13 @@ management:
   endpoint:
     health:
       show-details: never
+  tracing:
+    sampling:
+      probability: 1.0  # 모든 요청 추적 (운영 환경에서는 0.1 정도로 조정)
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
 
 fastapi:
   base-url: ${FASTAPI_BASE_URL}
