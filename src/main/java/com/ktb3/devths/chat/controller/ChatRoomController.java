@@ -1,14 +1,19 @@
 package com.ktb3.devths.chat.controller;
 
+import java.time.LocalDateTime;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ktb3.devths.chat.dto.request.PrivateChatRoomCreateRequest;
+import com.ktb3.devths.chat.dto.response.ChatRoomListResponse;
 import com.ktb3.devths.chat.dto.response.PrivateChatRoomCreateResponse;
 import com.ktb3.devths.chat.service.ChatRoomService;
 import com.ktb3.devths.global.response.ApiResponse;
@@ -23,6 +28,23 @@ import lombok.RequiredArgsConstructor;
 public class ChatRoomController {
 
 	private final ChatRoomService chatRoomService;
+
+	@GetMapping
+	public ResponseEntity<ApiResponse<ChatRoomListResponse>> getChatRoomList(
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		@RequestParam(defaultValue = "PRIVATE") String type,
+		@RequestParam(required = false) Integer size,
+		@RequestParam(required = false) LocalDateTime cursor
+	) {
+		ChatRoomListResponse response = chatRoomService.getChatRoomList(
+			userPrincipal.getUserId(),
+			type,
+			size,
+			cursor
+		);
+
+		return ResponseEntity.ok(ApiResponse.success("채팅방 목록을 성공적으로 조회하였습니다.", response));
+	}
 
 	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201")
 	@PostMapping("/private")

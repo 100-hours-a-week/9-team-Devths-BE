@@ -1,8 +1,12 @@
 package com.ktb3.devths.chat.service;
 
 import java.security.SecureRandom;
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -10,6 +14,8 @@ import com.ktb3.devths.chat.domain.constant.ChatRoomTypes;
 import com.ktb3.devths.chat.domain.entity.ChatMember;
 import com.ktb3.devths.chat.domain.entity.ChatPrivateRoom;
 import com.ktb3.devths.chat.domain.entity.ChatRoom;
+import com.ktb3.devths.chat.dto.response.ChatRoomListResponse;
+import com.ktb3.devths.chat.dto.response.ChatRoomSummaryResponse;
 import com.ktb3.devths.chat.dto.response.PrivateChatRoomCreateResponse;
 import com.ktb3.devths.chat.repository.ChatMemberRepository;
 import com.ktb3.devths.chat.repository.ChatPrivateRoomRepository;
@@ -27,6 +33,8 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class ChatRoomService {
 
+	private static final int DEFAULT_PAGE_SIZE = 10;
+	private static final int MAX_PAGE_SIZE = 100;
 	private static final String INVITE_CODE_CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 	private static final int INVITE_CODE_LENGTH = 8;
 	private static final int MAX_INVITE_CODE_RETRY = 5;
@@ -35,6 +43,50 @@ public class ChatRoomService {
 	private final ChatPrivateRoomRepository chatPrivateRoomRepository;
 	private final ChatMemberRepository chatMemberRepository;
 	private final UserRepository userRepository;
+
+	@Transactional(readOnly = true)
+	public ChatRoomListResponse getChatRoomList(Long userId, String type, Integer size, LocalDateTime cursor) {
+		ChatRoomTypes roomType;
+		try {
+			roomType = ChatRoomTypes.valueOf(type);
+		} catch (IllegalArgumentException e) {
+			throw new CustomException(ErrorCode.INVALID_REQUEST);
+		}
+
+		int pageSize = (size == null || size <= 0)
+			? DEFAULT_PAGE_SIZE
+			: Math.min(size, MAX_PAGE_SIZE);
+		Pageable pageable = PageRequest.of(0, pageSize + 1);
+
+		List<ChatMember> members = (cursor == null)
+			? chatMemberRepository.findByUserIdAndType(userId, roomType, pageable)
+			: chatMemberRepository.findByUserIdAndTypeAfterCursor(userId, roomType, cursor, pageable);
+
+		boolean hasNext = members.size() > pageSize;
+		List<ChatMember> actualMembers = hasNext
+			? members.subList(0, pageSize)
+			: members;
+
+		List<ChatRoomSummaryResponse> chatRooms = actualMembers.stream()
+			.map(member -> {
+				ChatRoom room = member.getChatRoom();
+				return new ChatRoomSummaryResponse(
+					room.getId(),
+					member.getRoomName(),
+					room.getLastMessageContent(),
+					room.getLastMessageAt(),
+					room.getCurrentCount(),
+					room.getTag() != null ? room.getTag().name() : null
+				);
+			})
+			.toList();
+
+		LocalDateTime nextCursor = chatRooms.isEmpty()
+			? null
+			: chatRooms.getLast().lastMessageAt();
+
+		return new ChatRoomListResponse(chatRooms, nextCursor, hasNext);
+	}
 
 	@Transactional
 	public PrivateChatRoomCreateResponse createPrivateChatRoom(Long currentUserId, Long targetUserId) {

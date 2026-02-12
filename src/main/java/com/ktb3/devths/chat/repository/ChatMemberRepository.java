@@ -1,8 +1,35 @@
 package com.ktb3.devths.chat.repository;
 
-import org.springframework.data.jpa.repository.JpaRepository;
+import java.time.LocalDateTime;
+import java.util.List;
 
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import com.ktb3.devths.chat.domain.constant.ChatRoomTypes;
 import com.ktb3.devths.chat.domain.entity.ChatMember;
 
 public interface ChatMemberRepository extends JpaRepository<ChatMember, Long> {
+
+	@Query("SELECT m FROM ChatMember m JOIN FETCH m.chatRoom r "
+		+ "WHERE m.user.id = :userId AND r.type = :type AND r.isDeleted = false "
+		+ "ORDER BY r.lastMessageAt DESC NULLS LAST, r.id DESC")
+	List<ChatMember> findByUserIdAndType(
+		@Param("userId") Long userId,
+		@Param("type") ChatRoomTypes type,
+		Pageable pageable
+	);
+
+	@Query("SELECT m FROM ChatMember m JOIN FETCH m.chatRoom r "
+		+ "WHERE m.user.id = :userId AND r.type = :type AND r.isDeleted = false "
+		+ "AND (r.lastMessageAt < :cursor OR r.lastMessageAt IS NULL) "
+		+ "ORDER BY r.lastMessageAt DESC NULLS LAST, r.id DESC")
+	List<ChatMember> findByUserIdAndTypeAfterCursor(
+		@Param("userId") Long userId,
+		@Param("type") ChatRoomTypes type,
+		@Param("cursor") LocalDateTime cursor,
+		Pageable pageable
+	);
 }
