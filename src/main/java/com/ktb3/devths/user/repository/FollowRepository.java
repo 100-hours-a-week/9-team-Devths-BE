@@ -25,10 +25,10 @@ public interface FollowRepository extends JpaRepository<Follow, Long> {
 	List<Long> findFollowingIdsByFollowerIdAndFollowingIdIn(@Param("followerId") Long followerId, @Param("followingIds") List<Long> followingIds);
 
 	@Query("SELECT f FROM Follow f JOIN FETCH f.following WHERE f.follower.id = :userId AND f.following.isWithdraw = false "
-		+ "AND (:nickname IS NULL OR f.following.nickname LIKE CONCAT('%', :nickname, '%')) ORDER BY f.id DESC")
+		+ "AND (:nickname IS NULL OR f.following.nickname LIKE CONCAT('%', CAST(:nickname AS string), '%')) ORDER BY f.id DESC")
 	List<Follow> findFollowingsByUserId(@Param("userId") Long userId, @Param("nickname") String nickname, Pageable pageable);
 
 	@Query("SELECT f FROM Follow f JOIN FETCH f.following WHERE f.follower.id = :userId AND f.following.isWithdraw = false "
-		+ "AND (:nickname IS NULL OR f.following.nickname LIKE CONCAT('%', :nickname, '%')) AND f.id < :lastId ORDER BY f.id DESC")
+		+ "AND (:nickname IS NULL OR f.following.nickname LIKE CONCAT('%', CAST(:nickname AS string), '%')) AND f.id < :lastId ORDER BY f.id DESC")
 	List<Follow> findFollowingsByUserIdAfterCursor(@Param("userId") Long userId, @Param("nickname") String nickname, @Param("lastId") Long lastId, Pageable pageable);
 }
