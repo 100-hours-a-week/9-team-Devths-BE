@@ -156,12 +156,6 @@ jobs:
       - name: 체크아웃
         uses: actions/checkout@v4
 
-      - name: 빌드 아티팩트 다운로드
-        uses: actions/download-artifact@v4
-        with:
-          name: build-artifacts
-          path: build/libs
-
       - name: AWS 자격 증명 설정
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -307,9 +301,6 @@ jobs:
         run: |
           set -euo pipefail
           echo "🚀 CodeDeploy 배포를 시작합니다..."
-          
-          VERSION_NAME="${{ needs.build.outputs.version_name }}"
-          S3_KEY="${{ needs.build.outputs.s3_key }}"
 
           aws deploy create-deployment \
             --application-name ${{ env.CODEDEPLOY_APPLICATION }} \
@@ -429,9 +420,8 @@ jobs:
             
             **🐳 Docker 이미지**: `${{ needs.build.outputs.image_tag }}`
             **🪣 S3 Key**: `${{ needs.build.outputs.s3_key }}`
-            **🚀 배포 결과**: ${{ needs.deploy.outputs.status}}            
+            **🚀 배포 결과**: ${{ needs.deploy.outputs.status }}
             **🆔 Deployment ID**: `${{ needs.deploy.outputs.deployment_id }}`
-            **🧾 에러**: ${{ needs.deploy.outputs.deployment_error || '없음' }}
 
             **🔍 상세 진행 단계**:
             - 아티팩트 다운로드: ${{ needs.deploy.outputs.status_download == 'Succeeded' && '✅' || (needs.deploy.outputs.status_download == 'Failed' && '❌' || '⏭️Skip/Wait') }}
