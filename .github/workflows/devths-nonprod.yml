@@ -317,9 +317,7 @@ jobs:
             --s3-location bucket=${{ env.S3_BUCKET }},key=${{ needs.build.outputs.s3_key }},bundleType=zip \
             --description "Deploy Docker Image: ${{ env.ECR_REGISTRY }}/${{ env.ECR_TARGET_REPO }}:${{ needs.build.outputs.image_tag }}" \
             --query 'deploymentId' \
-            --output json > deployment_output.json
-
-          DEPLOYMENT_ID=$(jq -r '.deploymentId' deployment_output.json)
+            --output text)
 
           # GITHUB_OUTPUT에 값 기록
           echo "deployment_id=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
