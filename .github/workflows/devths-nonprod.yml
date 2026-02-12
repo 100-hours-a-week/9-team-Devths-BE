@@ -286,7 +286,13 @@ jobs:
     needs: [ build ]
     if: success()
     outputs:
-      deployment_id: ${{ steps.deploy.outputs.deployment_id }}
+      deployment_id: ${{ steps.create.outputs.deployment_id }}
+      status: ${{ steps.status.outputs.status }}
+      error_message: ${{ steps.status.outputs.error_message }}
+      status_download: ${{ steps.lifecycle.outputs.status_download }}
+      status_app_start: ${{ steps.lifecycle.outputs.status_app_start }}
+      status_validate: ${{ steps.lifecycle.outputs.status_validate }}
+      error_step: ${{ steps.lifecycle.outputs.error_step }}
 
     steps:
       - name: AWS 자격 증명 설정
@@ -333,21 +339,20 @@ jobs:
 
           echo "✅ CodeDeploy 배포가 성공적으로 완료되었습니다!"
 
-      - name: 배포 결과 조회
-        id: result
+      - name: 배포 상태 조회
+        id: status
         if: always()
         run: |
           set -euo pipefail
 
-          # 배포 실페 처리 종료
           DEPLOYMENT_ID="${{ steps.create.outputs.deployment_id }}"
           if [ -z "${DEPLOYMENT_ID:-}" ]; then
             echo "status=UNKNOWN" >> $GITHUB_OUTPUT
             echo "error_message=Failed to create deployment (deployment_id missing)" >> $GITHUB_OUTPUT
             exit 0
           fi
-          
-          # 상태 조회
+
+          # 상태 및 에러 메시지 조회
           STATUS=$(aws deploy get-deployment --deployment-id "$DEPLOYMENT_ID" --query 'deploymentInfo.status' --output text)
           ERROR_MESSAGE=$(aws deploy get-deployment --deployment-id "$DEPLOYMENT_ID" --query 'deploymentInfo.errorInformation.message' --output text 2>/dev/null || true)
 
@@ -363,6 +368,44 @@ jobs:
           echo "📌 최종 상태: $STATUS"
           if [ -n "$ERROR_MESSAGE_CLEAN" ]; then
             echo "📌 에러: $ERROR_MESSAGE_CLEAN"
+          fi
+
+      - name: Lifecycle Event 상세 조회
+        id: lifecycle
+        if: always() && steps.create.outputs.deployment_id != ''
+        run: |
+          set -euo pipefail
+
+          DEPLOYMENT_ID="${{ steps.create.outputs.deployment_id }}"
+
+          # 인스턴스 ID 조회
+          INSTANCE_ID=$(aws deploy list-deployment-instances --deployment-id "$DEPLOYMENT_ID" --query "instancesList[0]" --output text 2>/dev/null || echo "")
+
+          if [ "$INSTANCE_ID" != "None" ] && [ -n "$INSTANCE_ID" ]; then
+            # Lifecycle Event 조회
+            EVENTS=$(aws deploy get-deployment-instance --deployment-id "$DEPLOYMENT_ID" --instance-id "$INSTANCE_ID" --query "instanceSummary.lifecycleEvents" 2>/dev/null || echo "[]")
+
+            # 각 단계별 상태 추출
+            STATUS_DOWNLOAD=$(echo "$EVENTS" | jq -r '.[] | select(.lifecycleEventName=="DownloadBundle") | .status' || echo "Unknown")
+            STATUS_APP_START=$(echo "$EVENTS" | jq -r '.[] | select(.lifecycleEventName=="ApplicationStart") | .status' || echo "Unknown")
+            STATUS_VALIDATE=$(echo "$EVENTS" | jq -r '.[] | select(.lifecycleEventName=="ValidateService") | .status' || echo "Unknown")
+
+            echo "status_download=${STATUS_DOWNLOAD:-Unknown}" >> $GITHUB_OUTPUT
+            echo "status_app_start=${STATUS_APP_START:-Unknown}" >> $GITHUB_OUTPUT
+            echo "status_validate=${STATUS_VALIDATE:-Unknown}" >> $GITHUB_OUTPUT
+
+            # 실패 단계 추출
+            if [ "${{ steps.status.outputs.status }}" != "Succeeded" ]; then
+               ERROR_STEP=$(echo "$EVENTS" | jq -r '.[] | select(.status=="Failed") | .lifecycleEventName' || echo "")
+               echo "error_step=${ERROR_STEP:-}" >> $GITHUB_OUTPUT
+            else
+               echo "error_step=" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "status_download=Unknown" >> $GITHUB_OUTPUT
+            echo "status_app_start=Unknown" >> $GITHUB_OUTPUT
+            echo "status_validate=Unknown" >> $GITHUB_OUTPUT
+            echo "error_step=" >> $GITHUB_OUTPUT
           fi    
 
 
@@ -373,71 +416,31 @@ jobs:
     needs: [ build, deploy ]
     if: always()
     steps:
-
-      - name: CodeDeploy 결과 조회
-        id: cd-check
-        run: |
-          DEPLOYMENT_ID="${{ needs.deploy.outputs.deployment_id }}"
-          echo "⏳ Waiting for CodeDeploy ($DEPLOYMENT_ID)..."
-          
-          # 배포 완료 대기
-          aws deploy wait deployment-successful --deployment-id $DEPLOYMENT_ID || true
-          
-          # 상태 조회
-          STATUS=$(aws deploy get-deployment --deployment-id $DEPLOYMENT_ID --query "deploymentInfo.status" --output text)
-          echo "status=$STATUS" >> $GITHUB_OUTPUT
-          
-          if [ "$STATUS" == "Succeeded" ]; then
-             echo "✅ 배포 성공"
-          else
-             echo "❌ 배포 실패"
-          fi
-          
-          # Lifecycle Event 상세 조회 (단일 인스턴스 기준)
-          INSTANCE_ID=$(aws deploy list-deployment-instances --deployment-id $DEPLOYMENT_ID --query "instancesList[0]" --output text)
-          
-          if [ "$INSTANCE_ID" != "None" ] && [ -n "$INSTANCE_ID" ]; then
-            EVENTS=$(aws deploy get-deployment-instance --deployment-id $DEPLOYMENT_ID --instance-id $INSTANCE_ID --query "instanceSummary.lifecycleEvents")
-          
-            # 각 단계별 상태 추출 (Succeeded, Failed, Skipped, Pending, Unknown)
-            STATUS_DOWNLOAD=$(echo $EVENTS | jq -r '.[] | select(.lifecycleEventName=="DownloadBundle") | .status')
-            STATUS_APP_START=$(echo $EVENTS | jq -r '.[] | select(.lifecycleEventName=="ApplicationStart") | .status')
-            STATUS_VALIDATE=$(echo $EVENTS | jq -r '.[] | select(.lifecycleEventName=="ValidateService") | .status')
-          
-            echo "status_download=$STATUS_DOWNLOAD" >> $GITHUB_OUTPUT
-            echo "status_app_start=$STATUS_APP_START" >> $GITHUB_OUTPUT
-            echo "status_validate=$STATUS_VALIDATE" >> $GITHUB_OUTPUT
-          
-            # 실패 시 상세 원인 추출
-            if [ "$STATUS" != "Succeeded" ]; then
-               ERROR_STEP=$(echo $EVENTS | jq -r '.[] | select(.status=="Failed") | .lifecycleEventName')
-               echo "error_step=$ERROR_STEP" >> $GITHUB_OUTPUT
-            fi
-          else
-            echo "status_download=Unknown" >> $GITHUB_OUTPUT
-            echo "status_app_start=Unknown" >> $GITHUB_OUTPUT
-            echo "status_validate=Unknown" >> $GITHUB_OUTPUT
-          fi
-
       - name: Discord CD 결과 알림
         uses: sarisia/actions-status-discord@v1
+        if: always()
         with:
           webhook: ${{ env.DISCORD_WEBHOOK_NON_PROD_URL }}
-          status: ${{ steps.cd-check.outputs.status == 'Succeeded' && 'success' || 'failure' }}
-          title: "${{ env.BRANCH_NAME }} 배포(CD) 결과 [${{ steps.cd-check.outputs.status == 'Succeeded' && '✅성공' || '❌실패' }}]"
+          status: ${{ needs.deploy.outputs.status == 'Succeeded' && 'success' || 'failure' }}
+          title: "${{ env.BRANCH_NAME }} 배포(CD) 결과 [${{ needs.deploy.outputs.status == 'Succeeded' && '✅성공' || '❌실패' }}]"
           description: |
             **브랜치**: `${{ env.BRANCH_NAME }}`
             **환경**: ${{ env.ENV_TYPE }}
+            
+            **🐳 Docker 이미지**: `${{ needs.build.outputs.image_tag }}`
+            **🪣 S3 Key**: `${{ needs.build.outputs.s3_key }}`
+            **🚀 배포 결과**: ${{ needs.deploy.outputs.status}}            
+            **🆔 Deployment ID**: `${{ needs.deploy.outputs.deployment_id }}`
+            **🧾 에러**: ${{ needs.deploy.outputs.deployment_error || '없음' }}
 
-            **CodeDeploy ID**: `${{ needs.deploy.outputs.deployment_id }}`            
-            **📊 배포 상태**: ${{ steps.cd-check.outputs.status }}
             **🔍 상세 진행 단계**:
-            - 아티팩트 다운로드: ${{ steps.cd-check.outputs.status_download == 'Succeeded' && '✅Pass' || (steps.cd-check.outputs.status_download == 'Failed' && '❌Fail' || '⏭️Skip/Wait') }}
-            - 새 서비스 실행: ${{ steps.cd-check.outputs.status_app_start == 'Succeeded' && '✅Pass' || (steps.cd-check.outputs.status_app_start == 'Failed' && '❌Fail' || '⏭️Skip/Wait') }}
-            - 검증/전환/종료: ${{ steps.cd-check.outputs.status_validate == 'Succeeded' && '✅Pass' || (steps.cd-check.outputs.status_validate == 'Failed' && '❌Fail' || '⏭️Skip/Wait') }}
+            - 아티팩트 다운로드: ${{ needs.deploy.outputs.status_download == 'Succeeded' && '✅' || (needs.deploy.outputs.status_download == 'Failed' && '❌' || '⏭️Skip/Wait') }}
+            - 새 서비스 실행: ${{ needs.deploy.outputs.status_app_start == 'Succeeded' && '✅' || (needs.deploy.outputs.status_app_start == 'Failed' && '❌' || '⏭️Skip/Wait') }}
+            - 검증/전환/종료: ${{ needs.deploy.outputs.status_validate == 'Succeeded' && '✅' || (needs.deploy.outputs.status_validate == 'Failed' && '❌' || '⏭️Skip/Wait') }}
 
-            ${{ steps.cd-check.outputs.status != 'Succeeded' && format('**⚠️ 실패 단계**: {0}', steps.cd-check.outputs.error_step) || '' }}
+            ${{ needs.deploy.outputs.error_step != '' && format('**⚠️ 실패 단계**: {0}', needs.deploy.outputs.error_step) || '' }}
+            ${{ needs.deploy.outputs.error_message != '' && format('**❌ 에러 메시지**: {0}', needs.deploy.outputs.error_message) || '' }}
 
-          color: "${{ steps.cd-check.outputs.status == 'Succeeded' && 65280 || 16711680 }}"
+          color: "${{ needs.deploy.outputs.status == 'Succeeded' && 65280 || 16711680 }}"
           username: GitHub BE NonProd Deploy Bot
           avatar_url: ${{ env.DISCORD_AVATAR_URL }}
