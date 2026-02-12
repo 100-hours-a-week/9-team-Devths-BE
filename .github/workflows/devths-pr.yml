@@ -1,4 +1,4 @@
-name: Devths-BE CI 파이프라인
+name: Devths-BE PR 파이프라인
 
 # dev/release/main 모두 진행
 on:
