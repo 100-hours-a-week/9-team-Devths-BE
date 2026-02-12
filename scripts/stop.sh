@@ -12,7 +12,7 @@ cd $REPOSITORY
 # Docker Compose로 내리기 (docker-compose.yml이 있다면)
 if [ -f "$REPOSITORY/docker-compose.yml" ]; then
     echo "> Docker Compose로 컨테이너 중지"
-    docker-compose down || true
+    docker compose down || true
 fi
 
 # 개별 컨테이너 정리 (혹시 남아있다면)
