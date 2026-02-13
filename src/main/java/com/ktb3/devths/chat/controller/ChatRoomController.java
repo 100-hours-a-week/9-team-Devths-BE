@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -15,9 +16,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ktb3.devths.chat.dto.request.ChatReadUpdateRequest;
 import com.ktb3.devths.chat.dto.request.ChatRoomUpdateRequest;
 import com.ktb3.devths.chat.dto.request.PrivateChatRoomCreateRequest;
 import com.ktb3.devths.chat.dto.response.ChatMessageListResponse;
+import com.ktb3.devths.chat.dto.response.ChatReadUpdateResponse;
 import com.ktb3.devths.chat.dto.response.ChatRoomDetailResponse;
 import com.ktb3.devths.chat.dto.response.ChatRoomListResponse;
 import com.ktb3.devths.chat.dto.response.ChatRoomUpdateResponse;
@@ -83,6 +86,21 @@ public class ChatRoomController {
 		);
 
 		return ResponseEntity.ok(ApiResponse.success("채팅방 상세 정보를 성공적으로 조회하였습니다.", response));
+	}
+
+	@PatchMapping("/{roomId}")
+	public ResponseEntity<ApiResponse<ChatReadUpdateResponse>> updateLastReadMsgId(
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		@PathVariable Long roomId,
+		@Valid @RequestBody ChatReadUpdateRequest request
+	) {
+		ChatReadUpdateResponse response = chatRoomService.updateLastReadMsgId(
+			userPrincipal.getUserId(),
+			roomId,
+			request.lastReadMsgId()
+		);
+
+		return ResponseEntity.ok(ApiResponse.success("채팅 읽음 정보를 성공적으로 갱신하였습니다.", response));
 	}
 
 	@PutMapping("/{roomId}")
