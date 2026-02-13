@@ -15,6 +15,7 @@ import com.ktb3.devths.chat.domain.entity.ChatMember;
 import com.ktb3.devths.chat.domain.entity.ChatPrivateRoom;
 import com.ktb3.devths.chat.domain.entity.ChatRoom;
 import com.ktb3.devths.chat.dto.request.ChatRoomUpdateRequest;
+import com.ktb3.devths.chat.dto.response.ChatReadUpdateResponse;
 import com.ktb3.devths.chat.dto.response.ChatRoomDetailResponse;
 import com.ktb3.devths.chat.dto.response.ChatRoomListResponse;
 import com.ktb3.devths.chat.dto.response.ChatRoomSummaryResponse;
@@ -27,6 +28,7 @@ import com.ktb3.devths.global.exception.CustomException;
 import com.ktb3.devths.global.response.ErrorCode;
 import com.ktb3.devths.global.storage.domain.constant.RefType;
 import com.ktb3.devths.global.storage.repository.S3AttachmentRepository;
+import com.ktb3.devths.global.util.LogSanitizer;
 import com.ktb3.devths.user.domain.entity.User;
 import com.ktb3.devths.user.repository.UserRepository;
 
@@ -219,6 +221,22 @@ public class ChatRoomService {
 		member.updateAlarmOn(request.isAlarmOn());
 
 		return new ChatRoomUpdateResponse(chatRoom.getId(), member.getRoomName());
+	}
+
+	@Transactional
+	public ChatReadUpdateResponse updateLastReadMsgId(Long userId, Long roomId, Long lastReadMsgId) {
+		chatRoomRepository.findByIdAndIsDeletedFalse(roomId)
+			.orElseThrow(() -> new CustomException(ErrorCode.CHATROOM_NOT_FOUND));
+
+		ChatMember member = chatMemberRepository.findByChatRoomIdAndUserId(roomId, userId)
+			.orElseThrow(() -> new CustomException(ErrorCode.CHATROOM_ACCESS_DENIED));
+
+		member.updateLastReadMsgId(lastReadMsgId);
+
+		log.info("채팅 읽음 정보 갱신: roomId={}, userId={}", LogSanitizer.sanitize(String.valueOf(roomId)),
+			LogSanitizer.sanitize(String.valueOf(userId)));
+
+		return new ChatReadUpdateResponse(roomId, lastReadMsgId);
 	}
 
 	@Transactional

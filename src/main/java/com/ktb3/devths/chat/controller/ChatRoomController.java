@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -15,12 +16,16 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ktb3.devths.chat.dto.request.ChatReadUpdateRequest;
 import com.ktb3.devths.chat.dto.request.ChatRoomUpdateRequest;
 import com.ktb3.devths.chat.dto.request.PrivateChatRoomCreateRequest;
+import com.ktb3.devths.chat.dto.response.ChatMessageListResponse;
+import com.ktb3.devths.chat.dto.response.ChatReadUpdateResponse;
 import com.ktb3.devths.chat.dto.response.ChatRoomDetailResponse;
 import com.ktb3.devths.chat.dto.response.ChatRoomListResponse;
 import com.ktb3.devths.chat.dto.response.ChatRoomUpdateResponse;
 import com.ktb3.devths.chat.dto.response.PrivateChatRoomCreateResponse;
+import com.ktb3.devths.chat.service.ChatMessageService;
 import com.ktb3.devths.chat.service.ChatRoomService;
 import com.ktb3.devths.global.response.ApiResponse;
 import com.ktb3.devths.global.security.UserPrincipal;
@@ -34,6 +39,24 @@ import lombok.RequiredArgsConstructor;
 public class ChatRoomController {
 
 	private final ChatRoomService chatRoomService;
+	private final ChatMessageService chatMessageService;
+
+	@GetMapping("/{roomId}/messages")
+	public ResponseEntity<ApiResponse<ChatMessageListResponse>> getChatMessages(
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		@PathVariable Long roomId,
+		@RequestParam(required = false) Integer size,
+		@RequestParam(required = false) Long lastId
+	) {
+		ChatMessageListResponse response = chatMessageService.getChatMessages(
+			userPrincipal.getUserId(),
+			roomId,
+			size,
+			lastId
+		);
+
+		return ResponseEntity.ok(ApiResponse.success("대화 이력을 성공적으로 불러왔습니다.", response));
+	}
 
 	@GetMapping
 	public ResponseEntity<ApiResponse<ChatRoomListResponse>> getChatRoomList(
@@ -65,6 +88,21 @@ public class ChatRoomController {
 		return ResponseEntity.ok(ApiResponse.success("채팅방 상세 정보를 성공적으로 조회하였습니다.", response));
 	}
 
+	@PatchMapping("/{roomId}")
+	public ResponseEntity<ApiResponse<ChatReadUpdateResponse>> updateLastReadMsgId(
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		@PathVariable Long roomId,
+		@Valid @RequestBody ChatReadUpdateRequest request
+	) {
+		ChatReadUpdateResponse response = chatRoomService.updateLastReadMsgId(
+			userPrincipal.getUserId(),
+			roomId,
+			request.lastReadMsgId()
+		);
+
+		return ResponseEntity.ok(ApiResponse.success("채팅 읽음 정보를 성공적으로 갱신하였습니다.", response));
+	}
+
 	@PutMapping("/{roomId}")
 	public ResponseEntity<ApiResponse<ChatRoomUpdateResponse>> updateChatRoom(
 		@AuthenticationPrincipal UserPrincipal userPrincipal,
@@ -89,6 +127,22 @@ public class ChatRoomController {
 		chatRoomService.leaveChatRoom(
 			userPrincipal.getUserId(),
 			roomId
+		);
+
+		return ResponseEntity.noContent().build();
+	}
+
+	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204")
+	@DeleteMapping("/{roomId}/messages/{messageId}")
+	public ResponseEntity<Void> deleteMessage(
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		@PathVariable Long roomId,
+		@PathVariable Long messageId
+	) {
+		chatMessageService.deleteMessage(
+			userPrincipal.getUserId(),
+			roomId,
+			messageId
 		);
 
 		return ResponseEntity.noContent().build();
