@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.ktb3.devths.ai.analysis.repository.AiOcrResultRepository;
+import com.ktb3.devths.ai.chatbot.domain.constant.InterviewCompletionType;
 import com.ktb3.devths.ai.chatbot.domain.constant.InterviewStatus;
 import com.ktb3.devths.ai.chatbot.domain.constant.InterviewType;
 import com.ktb3.devths.ai.chatbot.domain.constant.MessageRole;
@@ -37,6 +38,8 @@ import reactor.core.publisher.Flux;
 @Service
 @RequiredArgsConstructor
 public class AiChatInterviewService {
+
+	private static final int MAX_EVALUATION_CONTEXT_PAIRS = 15;
 
 	private final AiChatInterviewRepository aiChatInterviewRepository;
 	private final AiChatMessageRepository aiChatMessageRepository;
@@ -90,11 +93,30 @@ public class AiChatInterviewService {
 		return aiChatInterviewRepository.findByRoomIdAndStatus(roomId, InterviewStatus.IN_PROGRESS);
 	}
 
+	@Transactional
+	public AiChatInterview endInterview(Long roomId, Long interviewId) {
+		AiChatInterview interview = aiChatInterviewRepository.findById(interviewId)
+			.orElseThrow(() -> new CustomException(ErrorCode.INTERVIEW_NOT_FOUND));
+
+		if (!interview.getRoom().getId().equals(roomId)) {
+			throw new CustomException(ErrorCode.INVALID_INPUT);
+		}
+
+		if (interview.getStatus() != InterviewStatus.COMPLETED) {
+			interview.complete(InterviewCompletionType.MANUAL_END);
+		}
+
+		return interview;
+	}
+
 	public Flux<String> evaluateInterview(Long interviewId, boolean retry) {
 		// 현재 스레드의 Authentication 캡처 (여기서는 SecurityContext가 존재함)
 		Authentication currentAuth = SecurityContextHolder.getContext().getAuthentication();
 
 		AiChatInterview interview = getInterview(interviewId);
+		if (interview.getCompletionType() == InterviewCompletionType.MANUAL_END) {
+			throw new CustomException(ErrorCode.INTERVIEW_EVALUATION_NOT_ALLOWED);
+		}
 		AiChatRoom room = interview.getRoom();
 
 		List<AiChatMessage> messages = aiChatMessageRepository.findAll().stream()
@@ -107,17 +129,20 @@ public class AiChatInterviewService {
 		}
 
 		// ASSISTANT(질문) → USER(답변) 순서로 페어링하여 Q&A 쌍 생성
-		List<FastApiInterviewEvaluationRequest.ContextEntry> context = new java.util.ArrayList<>();
+		List<FastApiInterviewEvaluationRequest.ContextEntry> allContext = new java.util.ArrayList<>();
 		for (int i = 0; i < messages.size() - 1; i++) {
 			AiChatMessage current = messages.get(i);
 			AiChatMessage next = messages.get(i + 1);
 			if (current.getRole() == MessageRole.ASSISTANT && next.getRole() == MessageRole.USER) {
-				context.add(new FastApiInterviewEvaluationRequest.ContextEntry(
+				allContext.add(new FastApiInterviewEvaluationRequest.ContextEntry(
 					current.getContent(),
 					next.getContent()
 				));
 			}
 		}
+
+		int fromIndex = Math.max(0, allContext.size() - MAX_EVALUATION_CONTEXT_PAIRS);
+		List<FastApiInterviewEvaluationRequest.ContextEntry> context = allContext.subList(fromIndex, allContext.size());
 
 		// roomId와 userId 추출
 		Long roomId = room.getId();
@@ -148,7 +173,7 @@ public class AiChatInterviewService {
 				log.debug("평가 결과 청크 수신: length={}", chunk.length());
 			})
 			.doOnComplete(() -> {
-				if (!hasError.get() && fullEvaluation.length() > 0) {
+				if (!hasError.get() && !fullEvaluation.isEmpty()) {
 					try {
 						// SecurityContext 복원
 						SecurityContextHolder.getContext().setAuthentication(currentAuth);
@@ -162,7 +187,7 @@ public class AiChatInterviewService {
 								// 2. 면접 상태를 COMPLETED로 변경
 								AiChatInterview interviewEntity = aiChatInterviewRepository.findById(interviewId)
 									.orElseThrow(() -> new CustomException(ErrorCode.INTERVIEW_NOT_FOUND));
-								interviewEntity.complete();
+								interviewEntity.complete(InterviewCompletionType.EVALUATION);
 
 								log.info("면접 평가 완료 및 저장: interviewId={}, evaluationLength={}",
 									interviewId, fullEvaluation.length());
