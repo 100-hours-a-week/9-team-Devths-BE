@@ -62,4 +62,9 @@ public class ChatMessage {
 
 	@Column(name = "deleted_at")
 	private LocalDateTime deletedAt;
+
+	public void softDelete() {
+		this.isDeleted = true;
+		this.deletedAt = LocalDateTime.now();
+	}
 }

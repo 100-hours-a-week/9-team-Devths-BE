@@ -146,6 +146,28 @@ public class ChatMessageService {
 		return response;
 	}
 
+	@Transactional
+	public void deleteMessage(Long userId, Long roomId, Long messageId) {
+		chatRoomRepository.findByIdAndIsDeletedFalse(roomId)
+			.orElseThrow(() -> new CustomException(ErrorCode.CHATROOM_NOT_FOUND));
+
+		chatMemberRepository.findByChatRoomIdAndUserId(roomId, userId)
+			.orElseThrow(() -> new CustomException(ErrorCode.CHATROOM_ACCESS_DENIED));
+
+		ChatMessage message = chatMessageRepository.findById(messageId)
+			.filter(m -> m.getChatRoom().getId().equals(roomId))
+			.orElseThrow(() -> new CustomException(ErrorCode.CHAT_MESSAGE_NOT_FOUND));
+
+		if (message.getSender() == null || !message.getSender().getId().equals(userId)) {
+			throw new CustomException(ErrorCode.CHAT_MESSAGE_ACCESS_DENIED);
+		}
+
+		message.softDelete();
+
+		log.info("채팅 메시지 삭제: roomId={}, messageId={}", LogSanitizer.sanitize(String.valueOf(roomId)),
+			LogSanitizer.sanitize(String.valueOf(messageId)));
+	}
+
 	private Map<Long, String> fetchProfileImages(List<ChatMessage> messages) {
 		List<Long> senderIds = messages.stream()
 			.map(ChatMessage::getSender)

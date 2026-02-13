@@ -114,6 +114,22 @@ public class ChatRoomController {
 		return ResponseEntity.noContent().build();
 	}
 
+	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204")
+	@DeleteMapping("/{roomId}/messages/{messageId}")
+	public ResponseEntity<Void> deleteMessage(
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		@PathVariable Long roomId,
+		@PathVariable Long messageId
+	) {
+		chatMessageService.deleteMessage(
+			userPrincipal.getUserId(),
+			roomId,
+			messageId
+		);
+
+		return ResponseEntity.noContent().build();
+	}
+
 	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201")
 	@PostMapping("/private")
 	public ResponseEntity<ApiResponse<PrivateChatRoomCreateResponse>> createPrivateChatRoom(
