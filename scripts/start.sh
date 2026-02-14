@@ -5,6 +5,13 @@ set -euo pipefail
 REPOSITORY=/home/ubuntu/app
 cd $REPOSITORY
 
+# 종료 시 민감 파일 항상 삭제 (성공/실패/오류 모두)
+cleanup() {
+    sudo rm -f "$REPOSITORY/.env"
+    sudo rm -f "$REPOSITORY/image-info.env"
+}
+trap cleanup EXIT
+
 echo "> 배포 시작"
 
 # 1. image-info.env 파일에서 이미지 정보 로드
@@ -61,7 +68,10 @@ echo "> Parameter Store에서 파라미터 가져오는 중..."
 
 # 임시 .env 파일 생성
 ENV_FILE="$REPOSITORY/.env"
-rm -f "$ENV_FILE"
+sudo rm -f "$ENV_FILE"
+sudo touch "$ENV_FILE"
+sudo chown "$(id -un)":"$(id -gn)" "$ENV_FILE"
+chmod 600 "$ENV_FILE"
 
 # 파라미터 개수 카운트
 PARAM_COUNT=0
@@ -104,7 +114,6 @@ echo "> 환경 변수 $PARAM_COUNT 개 로드 완료"
 
 if [ "$PARAM_COUNT" -eq 0 ]; then
     echo "❌ [Error] Parameter Store에서 파라미터를 가져오지 못했습니다."
-    rm -f "$ENV_FILE"
     exit 1
 fi
 
@@ -127,7 +136,6 @@ fi
 echo "> Docker Compose로 애플리케이션 시작 (환경 변수 주입)"
 if [ ! -f "$REPOSITORY/docker-compose.yml" ]; then
     echo "❌ [Error] docker-compose.yml 파일을 찾을 수 없습니다."
-    rm -f "$ENV_FILE"
     exit 1
 fi
 
