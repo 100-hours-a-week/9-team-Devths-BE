@@ -17,12 +17,14 @@ import org.springframework.web.bind.annotation.RestController;
 import com.ktb3.devths.ai.chatbot.domain.entity.AiChatInterview;
 import com.ktb3.devths.ai.chatbot.domain.entity.AiChatRoom;
 import com.ktb3.devths.ai.chatbot.dto.request.AiChatMessageRequest;
+import com.ktb3.devths.ai.chatbot.dto.request.InterviewEndRequest;
 import com.ktb3.devths.ai.chatbot.dto.request.InterviewEvaluationRequest;
 import com.ktb3.devths.ai.chatbot.dto.request.InterviewStartRequest;
 import com.ktb3.devths.ai.chatbot.dto.response.AiChatMessageListResponse;
 import com.ktb3.devths.ai.chatbot.dto.response.AiChatRoomCreateResponse;
 import com.ktb3.devths.ai.chatbot.dto.response.AiChatRoomListResponse;
 import com.ktb3.devths.ai.chatbot.dto.response.CurrentInterviewResponse;
+import com.ktb3.devths.ai.chatbot.dto.response.InterviewEndResponse;
 import com.ktb3.devths.ai.chatbot.dto.response.InterviewStartResponse;
 import com.ktb3.devths.ai.chatbot.repository.AiChatRoomRepository;
 import com.ktb3.devths.ai.chatbot.service.AiChatInterviewService;
@@ -198,6 +200,27 @@ public class AiChatRoomController {
 			.body(ApiResponse.success(message, response));
 	}
 
+	@PostMapping("/{roomId}/interview/end")
+	public ResponseEntity<ApiResponse<InterviewEndResponse>> endInterview(
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		@PathVariable Long roomId,
+		@Valid @RequestBody InterviewEndRequest request
+	) {
+		AiChatRoom room = aiChatRoomRepository.findByIdAndIsDeletedFalse(roomId)
+			.orElseThrow(() -> new CustomException(ErrorCode.AI_CHATROOM_NOT_FOUND));
+
+		if (!room.getUser().getId().equals(userPrincipal.getUserId())) {
+			throw new CustomException(ErrorCode.AI_CHATROOM_ACCESS_DENIED);
+		}
+
+		AiChatInterview interview = aiChatInterviewService.endInterview(roomId, request.interviewId());
+		InterviewEndResponse response = new InterviewEndResponse(interview.getId(), interview.getStatus().name());
+
+		return ResponseEntity.ok(
+			ApiResponse.success("면접이 종료되었습니다.", response)
+		);
+	}
+
 	@PostMapping(value = "/{roomId}/evaluation", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
 	public Flux<ServerSentEvent<String>> evaluateInterview(
 		@AuthenticationPrincipal UserPrincipal userPrincipal,
@@ -211,7 +234,8 @@ public class AiChatRoomController {
 			throw new CustomException(ErrorCode.AI_CHATROOM_ACCESS_DENIED);
 		}
 
-		Flux<String> evaluationStream = aiChatInterviewService.evaluateInterview(request.interviewId());
+		boolean retry = request.retry() != null && request.retry();
+		Flux<String> evaluationStream = aiChatInterviewService.evaluateInterview(request.interviewId(), retry);
 
 		return evaluationStream
 			.map(chunk -> {

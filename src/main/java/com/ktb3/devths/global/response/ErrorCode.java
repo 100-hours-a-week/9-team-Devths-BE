@@ -16,9 +16,11 @@ public enum ErrorCode {
 	INVALID_AUTH_CODE(HttpStatus.BAD_REQUEST, "유효하지 않은 인증 코드입니다"),
 	INVALID_FILE_REFERENCE(HttpStatus.BAD_REQUEST, "유효하지 않은 파일 참조입니다"),
 	INVALID_EVENT_TIME(HttpStatus.BAD_REQUEST, "일정 시작 시간은 종료 시간보다 이전이어야 합니다"),
-	INTERVIEW_COMPLETED_EVALUATION_REQUIRED(HttpStatus.BAD_REQUEST, "면접 질문 5개가 완료되었습니다. 평가를 진행해주세요."),
+	INTERVIEW_COMPLETED(HttpStatus.BAD_REQUEST, "면접이 종료되었습니다. 새 면접을 시작해 주세요."),
+	INTERVIEW_EVALUATION_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "종료된 면접은 평가할 수 없습니다."),
 	SELF_FOLLOW_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "본인을 팔로우할 수 없습니다"),
 	SELF_UNFOLLOW_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "본인을 언팔로우할 수 없습니다"),
+	SELF_CHAT_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "본인과의 채팅방은 생성할 수 없습니다"),
 
 	// 401 Unauthorized
 	UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "인증이 필요합니다"),
@@ -31,6 +33,7 @@ public enum ErrorCode {
 	REFRESH_TOKEN_REUSED(HttpStatus.UNAUTHORIZED, "이미 사용된 리프레시 토큰입니다"),
 	GOOGLE_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "Google 토큰이 만료되었습니다"),
 	GOOGLE_TOKEN_REFRESH_FAILED(HttpStatus.UNAUTHORIZED, "Google 토큰 갱신에 실패했습니다"),
+	WEBSOCKET_AUTH_FAILED(HttpStatus.UNAUTHORIZED, "WebSocket 인증에 실패했습니다"),
 
 	// 403 Forbidden
 	ACCESS_DENIED(HttpStatus.FORBIDDEN, "접근 권한이 없습니다"),
@@ -42,6 +45,8 @@ public enum ErrorCode {
 	EVENT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 일정에 접근 권한이 없습니다"),
 	POST_ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 게시글에 접근 권한이 없습니다"),
 	COMMENT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 댓글에 접근 권한이 없습니다"),
+	CHATROOM_ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 채팅방에 접근 권한이 없습니다"),
+	CHAT_MESSAGE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 메시지에 접근 권한이 없습니다"),
 
 	// 404 Not Found
 	RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 리소스를 찾을 수 없습니다"),
@@ -53,6 +58,8 @@ public enum ErrorCode {
 	TODO_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 할 일을 찾을 수 없습니다"),
 	POST_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 게시글을 찾을 수 없습니다"),
 	COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 댓글을 찾을 수 없습니다"),
+	CHATROOM_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 채팅방을 찾을 수 없습니다"),
+	CHAT_MESSAGE_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 메시지를 찾을 수 없습니다"),
 
 	// 409 Conflict
 	DUPLICATE_EMAIL(HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다"),
