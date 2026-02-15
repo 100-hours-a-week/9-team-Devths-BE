@@ -147,5 +147,13 @@ async:
 
 logging:
   level:
+    com.ktb3.devths: ${LOG_LEVEL_APP:INFO}
+    org.springframework.web: ${LOG_LEVEL_SPRING_WEB:INFO}
+    org.hibernate.SQL: ${LOG_LEVEL_HIBERNATE_SQL:WARN}
+    org.hibernate.type.descriptor.sql.BasicBinder: ${LOG_LEVEL_HIBERNATE_BINDER:OFF}
     com.ktb3.devths.ai.client.FastApiClient: ${LOG_LEVEL}
     com.ktb3.devths.ai.chatbot.service.AiChatMessageService: ${LOG_LEVEL}
+  pattern:
+    level: "%5p [traceId=%X{traceId}]"
+  file:
+    name: ${LOG_FILE_DIRECTORY:}
