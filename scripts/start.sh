@@ -140,8 +140,8 @@ if [ -z "$LOG_DIR" ]; then
 fi
 echo "> 로그 디렉토리 초기화: $LOG_DIR"
 sudo rm -rf "$LOG_DIR"
-mkdir -p "$LOG_DIR"
-chmod 755 "$LOG_DIR"
+sudo mkdir -p "$LOG_DIR"
+sudo chmod 755 "$LOG_DIR"
 
 # 7. docker-compose로 컨테이너 실행
 echo "> Docker Compose로 애플리케이션 시작 (환경 변수 주입)"
