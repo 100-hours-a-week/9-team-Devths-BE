@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: ${DB_URL}
+    url: ${DB_URL_V2}
     username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    password: ${DB_PASSWORD_V2}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: ${MAXIMUM_POOL_SIZE}
@@ -17,7 +17,7 @@ spring:
 
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
+      host: ${REDIS_HOST_V2:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
       timeout: ${REDIS_TIMEOUT:2000ms}
@@ -153,7 +153,3 @@ logging:
     org.hibernate.type.descriptor.sql.BasicBinder: ${LOG_LEVEL_HIBERNATE_BINDER:OFF}
     com.ktb3.devths.ai.client.FastApiClient: ${LOG_LEVEL}
     com.ktb3.devths.ai.chatbot.service.AiChatMessageService: ${LOG_LEVEL}
-  pattern:
-    level: "%5p [traceId=%X{traceId}]"
-  file:
-    name: /app/log/application.log
