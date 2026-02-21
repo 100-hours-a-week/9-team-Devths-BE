@@ -1,4 +1,4 @@
-name: Devths-BE 운영 배포
+name: Devths-BE 운영용 CD 파이프라인
 
 on:
   workflow_dispatch:

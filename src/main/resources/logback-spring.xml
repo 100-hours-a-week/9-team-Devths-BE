@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <springProperty scope="context" name="applicationName" source="spring.application.name" defaultValue="devths"/>
+
+    <!-- Console Appender - 개발 환경에서 사람이 읽기 쉬운 형식 -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{traceId:-},%X{spanId:-}] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- JSON File Appender - Promtail이 수집할 JSON 형식 로그 -->
+    <appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>log/application.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>log/application.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>10GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeMdcKeyName>traceId</includeMdcKeyName>
+            <includeMdcKeyName>spanId</includeMdcKeyName>
+            <customFields>{"application":"${applicationName}"}</customFields>
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <version>[ignore]</version>
+                <levelValue>[ignore]</levelValue>
+            </fieldNames>
+        </encoder>
+    </appender>
+
+    <!-- 비동기 JSON 파일 로깅 (성능 최적화) -->
+    <appender name="ASYNC_JSON_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>512</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <appender-ref ref="JSON_FILE"/>
+    </appender>
+
+    <!-- Root Logger -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="ASYNC_JSON_FILE"/>
+    </root>
+
+    <!-- yml logging.level에서 주입받는 로거 레벨 -->
+    <springProperty name="LOG_LEVEL_APP" source="logging.level.com.ktb3.devths"/>
+    <springProperty name="LOG_LEVEL_SPRING_WEB" source="logging.level.org.springframework.web"/>
+    <springProperty name="LOG_LEVEL_HIBERNATE_SQL" source="logging.level.org.hibernate.SQL"/>
+    <springProperty name="LOG_LEVEL_HIBERNATE_BINDER" source="logging.level.org.hibernate.type.descriptor.sql.BasicBinder"/>
+    <springProperty name="LOG_LEVEL_FASTAPI_CLIENT" source="logging.level.com.ktb3.devths.ai.client.FastApiClient"/>
+    <springProperty name="LOG_LEVEL_AI_CHAT_SERVICE" source="logging.level.com.ktb3.devths.ai.chatbot.service.AiChatMessageService"/>
+
+    <!-- 애플리케이션 로거 레벨 설정 -->
+    <logger name="com.ktb3.devths" level="${LOG_LEVEL_APP}"/>
+    <logger name="org.springframework.web" level="${LOG_LEVEL_SPRING_WEB}"/>
+    <logger name="org.hibernate.SQL" level="${LOG_LEVEL_HIBERNATE_SQL}"/>
+    <logger name="org.hibernate.type.descriptor.sql.BasicBinder" level="${LOG_LEVEL_HIBERNATE_BINDER}"/>
+    <logger name="com.ktb3.devths.ai.client.FastApiClient" level="${LOG_LEVEL_FASTAPI_CLIENT}"/>
+    <logger name="com.ktb3.devths.ai.chatbot.service.AiChatMessageService" level="${LOG_LEVEL_AI_CHAT_SERVICE}"/>
+</configuration>

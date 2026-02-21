@@ -1,4 +1,4 @@
-name: Devths-FE Release 자동화
+name: Devths-BE Release 자동화
 
 on:
   push:

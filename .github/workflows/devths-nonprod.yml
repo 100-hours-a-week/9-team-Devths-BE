@@ -1,0 +1,435 @@
+name: Devths-BE 비운영용 CICD 파이프라인
+
+on:
+  push:
+    branches:
+      - develop
+      - release/*
+
+permissions:
+  contents: read
+
+# 동시성 제어: 동일한 브랜치에 새로운 커밋이 오면 이전 워크플로우 취소
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # 공통 설정
+  JAVA_VERSION: "21"
+  USER_MAP_JSON: ${{ secrets.USER_MAP_JSON }}
+  BRANCH_NAME: ${{ github.ref_name }}
+  ENV_TYPE: ${{ startsWith(github.ref_name, 'release/') && '🧪 스테이징(STAGING)' || '🛠️ 개발(DEV)' }}
+
+  # AWS 설정
+  AWS_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY }}
+  AWS_SECRET_KEY: ${{ secrets.AWS_SECRET_KEY }}
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REGISTRY: ${{ secrets.AWS_ECR_REGISTRY }}
+  ECR_TARGET_REPO: "devths/be-${{ startsWith(github.ref_name, 'release/') && 'stg' || 'dev'}}"
+  S3_BUCKET: ${{ secrets.AWS_S3_BUCKET_V2 }}
+  S3_PREFIX: BE/${{ github.ref_name }}
+
+  # CodeDeploy 설정
+  CODEDEPLOY_APPLICATION: ${{ secrets.CODEDEPLOY_APPLICATION }}
+  CODE_DEPLOY_GROUP_NAME: ${{startsWith(github.ref_name, 'release/') && secrets.CODE_DEPLOY_GROUP_NAME_STAGING_V2 || secrets.CODE_DEPLOY_GROUP_NAME_DEV_V2 }}
+
+  # Discord 설정
+  DISCORD_WEBHOOK_NON_PROD_URL: ${{ secrets.DISCORD_WEBHOOK_NON_PROD_URL }}
+  DISCORD_AVATAR_URL: https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
+
+
+jobs:
+  # Lint 설정
+  lint:
+    name: lint
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - name: 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Java 및 Gradle 설치
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Gradle 실행 권한 부여
+        run: chmod +x gradlew
+
+      - name: Lint (CheckStyle) 수행
+        run: ./gradlew checkstyleMain
+
+      - name: Lint (CheckStyle) 결과 리포트
+        uses: lcollins/checkstyle-github-action@v2.0.0
+        if: always()
+        with:
+          path: '**/build/reports/checkstyle/*.xml'
+          title: 'Checkstyle 결과 Report'
+
+  # CodeQL 기반 코드 정적 분석 실행
+  static_analysis:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: true  # 정적 분석 실패 시 즉시 중단
+      matrix:
+        language: [ java-kotlin ]
+
+    steps:
+      - name: 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Java 및 Gradle 설치
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'gradle'
+
+      - name: CodeQL 초기화
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          config-file: "./.github/codeql/code-ql-heavy.yml"
+
+      - name: Build (Gradle)
+        run: |
+          chmod +x gradlew
+          ./gradlew build -x test -x check
+
+      - name: CodeQL 분석 수행
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
+          upload: true
+
+      - name: 보안 취약점 결과 확인 및 차단
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "⏳ 분석 결과가 GitHub에 반영되기를 기다리는 중 (10초)..."
+          sleep 10
+          
+          # 1. 현재 이벤트가 push인지 pr인지에 따라 검색할 REF 설정
+          # GITHUB_REF는 push일 땐 refs/heads/branch명, PR일 땐 refs/pull/번호/merge가 됩니다.
+          CURRENT_REF="${{ github.ref }}"
+          echo "📍 현재 Ref: $CURRENT_REF"
+          
+          # 2. API 호출하여 High/Critical 등급의 Open 상태인 알림 조회
+          ALERTS=$(gh api "repos/${{ github.repository }}/code-scanning/alerts?tool_name=CodeQL&state=open&ref=$CURRENT_REF" \
+            --jq '[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical")]')
+          
+          COUNT=$(echo "$ALERTS" | jq 'length')
+          
+          if [ "$COUNT" -gt 0 ]; then
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "❌ 보안 검사 실패: 고위험(High/Critical) 취약점 $COUNT개 발견"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "$ALERTS" | jq -r '.[] | "- [\(.rule.security_severity_level)] \(.rule.description) \n   위치: \(.most_recent_instance.location.path)"'
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            exit 1
+          else
+            echo "✅ 보안 검사 통과: 현재 커밋($CURRENT_REF)은 안전합니다."
+          fi
+  # 추후 통합 테스트 과정 추가 예정
+
+  # 도커 이미지 생성 및 업로드
+  build:
+    name: build
+    needs: [ lint, static_analysis ]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    if: success()
+    outputs:
+      image_tag: ${{ steps.timestamp.outputs.image_tag }}
+      s3_key: ${{ steps.upload.outputs.s3_key }}
+
+    steps:
+      - name: 체크아웃
+        uses: actions/checkout@v4
+
+      - name: AWS 자격 증명 설정
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: 타임스탬프 기반 이미지 태그 생성
+        id: timestamp
+        run: |
+          # SHA의 앞 7자리만 변수에 저장
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          # 날짜와 SHORT_SHA를 결합하여 OUTPUT에 저장
+          IMAGE_TAG="$(date +'%Y%m%d_%H%M%S')-$SHORT_SHA"
+          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: ECR 로그인
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Docker Buildx 설정
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker 이미지 빌드 및 ECR 푸시
+        env:
+          IMAGE_TAG: ${{ steps.timestamp.outputs.image_tag }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_TARGET_REPO }}:${{ env.IMAGE_TAG }}
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_TARGET_REPO }}:latest
+          provenance: false
+
+      - name: 1. 아티팩트 이름 설정
+        id: setup_name
+        run: |
+          ARTIFACT_NAME="deploy-${{ steps.timestamp.outputs.image_tag }}.zip"
+          echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+          # GITHUB_ENV에 저장해야 다음 Step에서 ${{ env.S3_KEY }}로 쓸 수 있습니다.
+          echo "S3_KEY=${{ env.S3_PREFIX }}/$ARTIFACT_NAME" >> $GITHUB_ENV
+
+      - name: 2. 임시 디렉토리 구조 준비
+        run: |
+          mkdir -p deploy-temp/scripts
+          # 파일 존재 여부가 확실치 않다면 cp 앞에 [ -f 파일명 ] 체크를 넣는 것이 안전합니다.
+          cp appspec.yml docker-compose.yml promtail-config.yml deploy-temp/
+          
+          if [ -d "scripts" ]; then
+            cp -r scripts/* deploy-temp/scripts/
+          else
+            echo "⚠️ scripts 디렉토리가 없습니다."
+          fi 
+
+      - name: 3. 이미지 정보 파일(image-info.env) 생성
+        run: |
+          cat > deploy-temp/image-info.env << EOF
+          DEVELOP=${{ env.BRANCH_NAME }}
+          ECR_REGISTRY=${{ env.ECR_REGISTRY }}
+          ECR_REPOSITORY=${{ env.ECR_TARGET_REPO }}
+          IMAGE_TAG=${{ steps.timestamp.outputs.image_tag }}
+          FULL_IMAGE=${{ env.ECR_REGISTRY }}/${{ env.ECR_TARGET_REPO }}:${{ steps.timestamp.outputs.image_tag }}
+          EOF
+
+      - name: 4. 배포 패키지 압축
+        run: |
+          cd deploy-temp
+          zip -r "../${{ steps.setup_name.outputs.artifact_name }}" . -q
+          cd .. 
+
+      - name: 5. S3 업로드
+        id: upload # <- outputs를 위해 id 추가
+        run: |
+          echo "🚀 ${{ steps.setup_name.outputs.artifact_name }}을 S3로 업로드합니다..."
+          aws s3 cp "${{ steps.setup_name.outputs.artifact_name }}" "s3://${{ env.S3_BUCKET }}/${{ env.S3_KEY }}" --only-show-errors
+          echo "✅ S3 업로드 완료"
+          echo "s3_key=${{ env.S3_KEY }}" >> $GITHUB_OUTPUT
+
+      - name: 6. 아티팩트 정보 출력
+        run: |
+          echo "Artifact: ${{ steps.setup_name.outputs.artifact_name }}"
+          echo "S3 Key: ${{ env.S3_KEY }}"
+
+
+  # CI 단계
+  notify-ci:
+    name: notify-ci
+    runs-on: ubuntu-22.04
+    needs: [ lint, static_analysis, build ]
+    if: always()
+    steps:
+      - name: Discord 빌드 알림
+        uses: sarisia/actions-status-discord@v1
+        with:
+          status: ${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && 'success' || 'failure' }}
+          # 타겟 브랜치에 따른 웹훅 분기
+          webhook: ${{ env.DISCORD_WEBHOOK_NON_PROD_URL }}
+          title: "배포(CI) 결과 [${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && '✅성공' || '❌실패' }}]"
+          description: |
+            **브랜치**: `${{ env.BRANCH_NAME }}`
+            **환경**: ${{ env.ENV_TYPE }}
+
+            **📊 상세 결과**:
+            - Lint: ${{ needs.lint.result == 'success' && '✅' || '❌' }}
+            - Static Analysis: ${{ needs.static_analysis.result == 'success' && '✅' || '❌' }}
+            - Build: ${{ needs.build.result == 'success' && '✅' || '❌' }}
+            
+            **🐳 Docker 이미지**: `${{ needs.build.outputs.image_tag }}`
+            **🪣 S3 Key**: `${{ needs.build.outputs.s3_key }}`
+            
+            **🔗 링크**: [커밋 확인하기](${{ github.event.repository.html_url }}/commit/${{ github.sha }})
+
+          color: "${{ (needs.lint.result == 'success' && needs.static_analysis.result == 'success' && needs.build.result == 'success') && 65280 || 16711680 }}"
+          username: GitHub BE NonProd Merge Bot
+          avatar_url: ${{ env.DISCORD_AVATAR_URL }}
+
+  # CodeDeploy 트리거
+  deploy:
+    name: deploy
+    runs-on: ubuntu-22.04
+    needs: [ build ]
+    if: success()
+    outputs:
+      deployment_id: ${{ steps.create.outputs.deployment_id }}
+      status: ${{ steps.status.outputs.status }}
+      error_message: ${{ steps.status.outputs.error_message }}
+      status_download: ${{ steps.lifecycle.outputs.status_download }}
+      status_app_start: ${{ steps.lifecycle.outputs.status_app_start }}
+      status_validate: ${{ steps.lifecycle.outputs.status_validate }}
+      error_step: ${{ steps.lifecycle.outputs.error_step }}
+
+    steps:
+      - name: AWS 자격 증명 설정
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: AWS CodeDeploy 배포 요청
+        id: create
+        run: |
+          set -euo pipefail
+          echo "🚀 CodeDeploy 배포를 시작합니다..."
+
+          # 배포 아이디 조회
+          DEPLOYMENT_ID=$(aws deploy create-deployment \
+            --application-name ${{ env.CODEDEPLOY_APPLICATION }} \
+            --deployment-group-name ${{ env.CODE_DEPLOY_GROUP_NAME }} \
+            --s3-location bucket=${{ env.S3_BUCKET }},key=${{ needs.build.outputs.s3_key }},bundleType=zip \
+            --description "Deploy Docker Image: ${{ env.ECR_REGISTRY }}/${{ env.ECR_TARGET_REPO }}:${{ needs.build.outputs.image_tag }}" \
+            --query 'deploymentId' \
+            --output text)
+
+          # GITHUB_OUTPUT에 값 기록
+          echo "deployment_id=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+          echo "✅ 배포 ID: $DEPLOYMENT_ID"
+
+      - name: 배포 완료(헬스체크 포함)까지 대기
+        id: wait
+        run: |
+          set -euo pipefail
+          DEPLOYMENT_ID="${{ steps.create.outputs.deployment_id }}"
+          echo "⏳ 배포 상태를 확인합니다 (ID: $DEPLOYMENT_ID)..."
+
+          # 배포 완료까지 대기 (최대 3분)
+          aws deploy wait deployment-successful \
+            --deployment-id "$DEPLOYMENT_ID" \
+            --cli-read-timeout 180
+
+          echo "✅ CodeDeploy 배포가 성공적으로 완료되었습니다!"
+
+      - name: 배포 상태 조회
+        id: status
+        if: always()
+        run: |
+          set -euo pipefail
+
+          DEPLOYMENT_ID="${{ steps.create.outputs.deployment_id }}"
+          if [ -z "${DEPLOYMENT_ID:-}" ]; then
+            echo "status=UNKNOWN" >> $GITHUB_OUTPUT
+            echo "error_message=Failed to create deployment (deployment_id missing)" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # 상태 및 에러 메시지 조회
+          STATUS=$(aws deploy get-deployment --deployment-id "$DEPLOYMENT_ID" --query 'deploymentInfo.status' --output text)
+          ERROR_MESSAGE=$(aws deploy get-deployment --deployment-id "$DEPLOYMENT_ID" --query 'deploymentInfo.errorInformation.message' --output text 2>/dev/null || true)
+
+          if [ "${ERROR_MESSAGE:-}" = "None" ] || [ "${ERROR_MESSAGE:-}" = "null" ]; then
+            ERROR_MESSAGE=""
+          fi
+
+          ERROR_MESSAGE_CLEAN=$(echo "${ERROR_MESSAGE:-}" | tr '\n' ' ' | head -c 400)
+
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+          echo "error_message=$ERROR_MESSAGE_CLEAN" >> $GITHUB_OUTPUT
+
+          echo "📌 최종 상태: $STATUS"
+          if [ -n "$ERROR_MESSAGE_CLEAN" ]; then
+            echo "📌 에러: $ERROR_MESSAGE_CLEAN"
+          fi
+
+      - name: Lifecycle Event 상세 조회
+        id: lifecycle
+        if: always() && steps.create.outputs.deployment_id != ''
+        run: |
+          set -euo pipefail
+
+          DEPLOYMENT_ID="${{ steps.create.outputs.deployment_id }}"
+
+          # 인스턴스 ID 조회
+          INSTANCE_ID=$(aws deploy list-deployment-instances --deployment-id "$DEPLOYMENT_ID" --query "instancesList[0]" --output text 2>/dev/null || echo "")
+
+          if [ "$INSTANCE_ID" != "None" ] && [ -n "$INSTANCE_ID" ]; then
+            # Lifecycle Event 조회
+            EVENTS=$(aws deploy get-deployment-instance --deployment-id "$DEPLOYMENT_ID" --instance-id "$INSTANCE_ID" --query "instanceSummary.lifecycleEvents" 2>/dev/null || echo "[]")
+
+            # 각 단계별 상태 추출
+            STATUS_DOWNLOAD=$(echo "$EVENTS" | jq -r '.[] | select(.lifecycleEventName=="DownloadBundle") | .status' || echo "Unknown")
+            STATUS_APP_START=$(echo "$EVENTS" | jq -r '.[] | select(.lifecycleEventName=="ApplicationStart") | .status' || echo "Unknown")
+            STATUS_VALIDATE=$(echo "$EVENTS" | jq -r '.[] | select(.lifecycleEventName=="ValidateService") | .status' || echo "Unknown")
+
+            echo "status_download=${STATUS_DOWNLOAD:-Unknown}" >> $GITHUB_OUTPUT
+            echo "status_app_start=${STATUS_APP_START:-Unknown}" >> $GITHUB_OUTPUT
+            echo "status_validate=${STATUS_VALIDATE:-Unknown}" >> $GITHUB_OUTPUT
+
+            # 실패 단계 추출
+            if [ "${{ steps.status.outputs.status }}" != "Succeeded" ]; then
+               ERROR_STEP=$(echo "$EVENTS" | jq -r '.[] | select(.status=="Failed") | .lifecycleEventName' || echo "")
+               echo "error_step=${ERROR_STEP:-}" >> $GITHUB_OUTPUT
+            else
+               echo "error_step=" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "status_download=Unknown" >> $GITHUB_OUTPUT
+            echo "status_app_start=Unknown" >> $GITHUB_OUTPUT
+            echo "status_validate=Unknown" >> $GITHUB_OUTPUT
+            echo "error_step=" >> $GITHUB_OUTPUT
+          fi    
+
+
+  # CD 단계 알림
+  notify-cd:
+    name: notify-cd
+    runs-on: ubuntu-22.04
+    needs: [ build, deploy ]
+    if: always()
+    steps:
+      - name: Discord CD 결과 알림
+        uses: sarisia/actions-status-discord@v1
+        if: always()
+        with:
+          webhook: ${{ env.DISCORD_WEBHOOK_NON_PROD_URL }}
+          status: ${{ needs.deploy.outputs.status == 'Succeeded' && 'success' || 'failure' }}
+          title: "${{ env.BRANCH_NAME }} 배포(CD) 결과 [${{ needs.deploy.outputs.status == 'Succeeded' && '✅성공' || '❌실패' }}]"
+          description: |
+            **브랜치**: `${{ env.BRANCH_NAME }}`
+            **환경**: ${{ env.ENV_TYPE }}
+            
+            **🐳 Docker 이미지**: `${{ needs.build.outputs.image_tag }}`
+            **🪣 S3 Key**: `${{ needs.build.outputs.s3_key }}`
+            **🚀 배포 결과**: ${{ needs.deploy.outputs.status }}
+            **🆔 Deployment ID**: `${{ needs.deploy.outputs.deployment_id }}`
+
+            **🔍 상세 진행 단계**:
+            - 아티팩트 다운로드: ${{ needs.deploy.outputs.status_download == 'Succeeded' && '✅' || (needs.deploy.outputs.status_download == 'Failed' && '❌' || '⏭️Skip/Wait') }}
+            - 새 서비스 실행: ${{ needs.deploy.outputs.status_app_start == 'Succeeded' && '✅' || (needs.deploy.outputs.status_app_start == 'Failed' && '❌' || '⏭️Skip/Wait') }}
+            - 검증/전환/종료: ${{ needs.deploy.outputs.status_validate == 'Succeeded' && '✅' || (needs.deploy.outputs.status_validate == 'Failed' && '❌' || '⏭️Skip/Wait') }}
+
+            ${{ needs.deploy.outputs.error_step != '' && format('**⚠️ 실패 단계**: {0}', needs.deploy.outputs.error_step) || '' }}
+            ${{ needs.deploy.outputs.error_message != '' && format('**❌ 에러 메시지**: {0}', needs.deploy.outputs.error_message) || '' }}
+
+          color: "${{ needs.deploy.outputs.status == 'Succeeded' && 65280 || 16711680 }}"
+          username: GitHub BE NonProd Deploy Bot
+          avatar_url: ${{ env.DISCORD_AVATAR_URL }}

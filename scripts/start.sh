@@ -1,173 +1,155 @@
 #!/usr/bin/env bash
 
-ABSPATH=$(readlink -f $0)
-ABSDIR=$(dirname $ABSPATH)
-source ${ABSDIR}/profile.sh
+set -euo pipefail
 
-IDLE_PROFILE=$(find_idle_profile)
-IDLE_PORT=$(find_idle_port)
+REPOSITORY=/home/ubuntu/app
+cd $REPOSITORY
 
-echo "> IDLE_PROFILE: $IDLE_PROFILE"
-echo "> IDLE_PORT: $IDLE_PORT"
+# 종료 시 민감 파일 항상 삭제 (성공/실패/오류 모두)
+cleanup() {
+    sudo rm -f "$REPOSITORY/.env"
+    sudo rm -f "$REPOSITORY/image-info.env"
+}
+trap cleanup EXIT
 
-# 1. 새 배포를 시작하기 전, IDLE 포트에서 돌고 있는 애플리케이션이 있다면 종료 (혹시 모를 충돌 방지)
-echo "> $IDLE_PORT 포트에서 구동 중인 애플리케이션 pid 확인"
-IDLE_PID=$(lsof -ti tcp:${IDLE_PORT})
+echo "> 배포 시작"
 
-if [ -z ${IDLE_PID} ]
-then
-  echo "> 현재 구동 중인 애플리케이션이 없으므로 종료하지 않습니다."
-else
-  echo "> kill -15 $IDLE_PID"
-  kill -15 ${IDLE_PID}
-  sleep 5
-fi
-
-# 2. 배포 파일 준비
-echo "> 배포 파일 복사"
-APP_NAME="devths-be"
-REPOSITORY=/home/ubuntu/be
-
-# 로그 디렉토리 생성
-mkdir -p $REPOSITORY/logs
-LOG_FILE=$REPOSITORY/logs/application.log
-
-BUILD_JAR=$(ls $REPOSITORY/application.jar)
-if [ -z "$BUILD_JAR" ]; then
-    echo "❌ [Artifact Error] 실행 가능한 JAR 파일을 찾을 수 없습니다."
+# 1. image-info.env 파일에서 이미지 정보 로드
+if [ ! -f "$REPOSITORY/image-info.env" ]; then
+    echo "❌ [Error] image-info.env 파일을 찾을 수 없습니다."
     exit 1
 fi
 
-# 배포 그룹에 따른 SSM Path 및 Spring Profile 파싱 (CodeDeploy 환경변수: DEPLOYMENT_GROUP_NAME 사용)
-SSM_PATH="/Dev/BE/"           # 기본값 (Dev)
-SPRING_PROFILE="dev"
+source $REPOSITORY/image-info.env
 
-if [[ "$DEPLOYMENT_GROUP_NAME" == *"Prod"* ]]; then
-    SSM_PATH="/Prod/BE/"
-    SPRING_PROFILE="prod"
-elif [[ "$DEPLOYMENT_GROUP_NAME" == *"Staging"* ]]; then
-    SSM_PATH="/Stg/BE/"
+# 환경 변수 export (docker-compose에서 사용)
+export DEVELOP
+export FULL_IMAGE
+export ECR_REGISTRY
+export ECR_REPOSITORY
+export IMAGE_TAG
+
+echo "> ECR 이미지: $FULL_IMAGE"
+echo "> 브랜치: $DEVELOP"
+
+# 2. AWS Parameter Store에서 환경 변수 로드
+echo "> AWS Parameter Store에서 환경 변수 로드"
+AWS_REGION=ap-northeast-2
+
+# 브랜치명으로 Parameter Store 경로와 Spring Profile 결정
+case $DEVELOP in
+  develop)
+    PARAM_PATH="/Dev/BE"
+    SPRING_PROFILE="dev"
+    ;;
+  staging)
+    PARAM_PATH="/Stg/BE"
     SPRING_PROFILE="stg"
-fi
+    ;;
+  main|master)
+    PARAM_PATH="/Prod/BE"
+    SPRING_PROFILE="prod"
+    ;;
+  *)
+    echo "⚠️  [Warning] 알 수 없는 브랜치 '$DEVELOP' - 기본값(dev) 사용"
+    PARAM_PATH="/Dev/BE"
+    SPRING_PROFILE="dev"
+    ;;
+esac
 
-echo "> AWS SSM Parameter Store에서 환경변수 주입 (Path: $SSM_PATH)"
-# jq 존재 여부 확인 (AMI에 미리 설치되어 있어야 함)
-if ! command -v jq &> /dev/null
-then
-    echo "❌ [Dependency Error] jq가 설치되어 있지 않습니다. 서버 셋팅을 확인해주세요."
+echo "> Spring Profile: $SPRING_PROFILE"
+
+echo "> Parameter Store 경로: $PARAM_PATH"
+
+# Parameter Store에서 파라미터 가져와서 임시 .env 파일 생성
+# --recursive: 하위 경로의 모든 파라미터 가져오기
+# --with-decryption: SecureString 타입 파라미터 복호화
+echo "> Parameter Store에서 파라미터 가져오는 중..."
+
+# 임시 .env 파일 생성
+ENV_FILE="$REPOSITORY/.env"
+sudo rm -f "$ENV_FILE"
+sudo touch "$ENV_FILE"
+sudo chown "$(id -un)":"$(id -gn)" "$ENV_FILE"
+chmod 600 "$ENV_FILE"
+
+# 파라미터 개수 카운트
+PARAM_COUNT=0
+
+# Parameter Store에서 파라미터를 가져와서 메모리상 .env 파일에 저장
+while IFS=$'\t' read -r name value; do
+    # 파라미터 이름에서 경로 제거하고 환경 변수 이름 추출
+    # 예: /Dev/BE/DB_HOST -> DB_HOST
+
+    # 1. 이름이나 값이 아예 없는 행은 무시 (공백 제거 후 체크)
+    if [ -z "${name// /}" ]; then
+        continue
+    fi
+
+    # 2. 파라미터 이름에서 경로 제거 (예: /Dev/BE/DB_HOST -> DB_HOST)
+    env_name=${name#$PARAM_PATH/}
+
+    # 3. [방어] 경로가 제거되지 않았거나(경로 자체가 이름인 경우), 변수명이 비어있으면 스킵
+    if [ -z "$env_name" ] || [ "$env_name" == "$name" ]; then
+        echo "⏭️  유효하지 않은 항목 건너뜀: $name"
+        continue
+    fi
+
+    # .env 파일에 저장
+    echo "$env_name=$value" >> "$ENV_FILE"
+
+    PARAM_COUNT=$((PARAM_COUNT + 1))
+done < <(aws ssm get-parameters-by-path \
+  --path "$PARAM_PATH" \
+  --recursive \
+  --with-decryption \
+  --region "$AWS_REGION" \
+  --query 'Parameters[*].[Name,Value]' \
+  --output text)
+
+# SPRING_PROFILES_ACTIVE도 .env 파일에 추가
+echo "SPRING_PROFILES_ACTIVE=$SPRING_PROFILE" >> "$ENV_FILE"
+
+echo "> 환경 변수 $PARAM_COUNT 개 로드 완료"
+
+if [ "$PARAM_COUNT" -eq 0 ]; then
+    echo "❌ [Error] Parameter Store에서 파라미터를 가져오지 못했습니다."
     exit 1
 fi
 
-# 경로 하위의 모든 파라미터를 가져와서 export (페이지네이션 이슈 방지를 위해 max-items 설정)
-PARAMETERS=$(aws ssm get-parameters-by-path --path "$SSM_PATH" --recursive --with-decryption --region ap-northeast-2 --max-items 100 --output json)
+# 3. ECR 로그인
+echo "> ECR 로그인"
+aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
-if [ -z "$PARAMETERS" ] || [ "$PARAMETERS" == "null" ]; then
-    echo "❌ [Configuration Error] SSM 파라미터를 가져오지 못했습니다. IAM 권한이나 경로($SSM_PATH)를 확인해주세요."
+# 4. 이미지 Pull
+echo "> Docker 이미지 Pull"
+docker pull "$FULL_IMAGE"
+
+# 5. 기존 컨테이너 전체 정리
+echo "> 기존 컨테이너 정리"
+if [ -f "$REPOSITORY/docker-compose.yml" ]; then
+    docker compose down || true
+fi
+
+# 6. 로그 디렉토리 초기화
+# Promtail 컨테이너가 재생성되면 positions.yaml이 초기화되어 기존 로그를 재전송할 수 있으므로 삭제 후 재생성
+LOG_DIR=$(grep '^LOG_FILE_DIRECTORY=' "$ENV_FILE" | cut -d'=' -f2)
+if [ -z "$LOG_DIR" ]; then
+    echo "❌ [Error] LOG_FILE_DIRECTORY가 .env에 없습니다."
     exit 1
-else
-    # jq로 "KEY=VALUE" 형식으로 변환 후, while loop로 읽어서 export 수행
-    # < <(...) 프로세스 치환을 사용하여 서브쉘 문제 방지
-    while IFS='=' read -r key value; do
-        if [ -n "$key" ]; then
-            export "$key"="$value"
-            echo "> Exported: $key"
-        fi
-    done < <(echo "$PARAMETERS" | jq -r --arg path "$SSM_PATH" '.Parameters[] | ((.Name | sub($path; "") | gsub("[.-]"; "_") | ascii_upcase) + "=" + .Value)')
 fi
+echo "> 로그 디렉토리 초기화: $LOG_DIR"
+sudo rm -rf "$LOG_DIR"
+sudo mkdir -p "$LOG_DIR"
+sudo chmod 755 "$LOG_DIR"
 
-# 포트 확인
-echo "> $IDLE_PORT 포트가 비어있는지 2차 확인"
-if lsof -Pi :$IDLE_PORT -sTCP:LISTEN -t >/dev/null ; then
-    echo "⚠️ [Port Warning] 포트 $IDLE_PORT 가 아직 사용 중입니다. 강제 종료를 시도합니다."
-    kill -15 $(lsof -Pi :$IDLE_PORT -sTCP:LISTEN -t) || true
-    sleep 3
-fi
-
-echo "> 새 애플리케이션 배포"
-
-# [수정] CodeDeploy 프로세스 정리 대상에서 제외
-export FOR_CODELDP_IGN=true
-
-nohup java \
-  -Dspring.config.location=classpath:/application.yml \
-  -Dspring.profiles.active=$IDLE_PROFILE,$SPRING_PROFILE \
-  -Dserver.port=$IDLE_PORT \
-  -Djava.rmi.server.hostname=127.0.0.1 \
-  -jar $BUILD_JAR >> $LOG_FILE 2>&1 &
-
-
-# [수정] 현재 세션에서 프로세스 분리
-disown
-
-echo "> 배포 완료. 구동 대기 중..."
-
-# 3. 구동 대기 (최대 60초)
-SUCCESS=false
-for i in {1..20}
-do
-    sleep 3
-    echo "> 구동 확인 ($i/60)..."
-    
-    # 1) lsof로 포트가 열렸는지 1차 확인 (빠른 실패 감지용)
-    if ! lsof -Pi :$IDLE_PORT -sTCP:LISTEN -t >/dev/null; then
-         echo "   ... 아직 포트가 열리지 않음"
-         continue
-    fi    
-
-    # 2) curl로 실제 응답 확인 (Health Check)
-    # Actuator Health 엔드포인트(/actuator/health)가 UP인지 확인
-    # 실패 시(Connection Refused 등)에는 000 반환됨
-    HEALTH_URL="http://localhost:$IDLE_PORT/actuator/health"
-    TMP_BODY=$(mktemp)
-    HTTP_CODE=$(curl -s -o "$TMP_BODY" -w "%{http_code}" "$HEALTH_URL" || echo "000")
-    RESPONSE=$(cat "$TMP_BODY" 2>/dev/null || echo "")
-    rm -f "$TMP_BODY"
-
-    if [ "$HTTP_CODE" == "200" ] && echo "$RESPONSE" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"'; then
-        # 성공 시 PID 추출
-        CURRENT_PID=$(lsof -ti tcp:${IDLE_PORT})
-        echo "> ✅ Health Check 성공 (HTTP 200). 구동 완료 (PID: $CURRENT_PID)."
-        SUCCESS=true
-        break
-    else
-        echo "   ... 포트는 열렸으나 아직 UP 응답 없음 (HTTP $HTTP_CODE)"
-    fi
-done
-
-if [ "$SUCCESS" = false ]; then
-    echo "❌ [Boot Error] 지정된 시간(180초) 내에 애플리케이션이 포트($IDLE_PORT)를 점유하지 못했습니다."
-    
-    # [Cleanup] 실패한 프로세스 정리 (Resource cleanup)
-    echo "> 🧹 배포에 실패한 프로세스를 정리합니다."
-    FAIL_PID=$(lsof -ti tcp:${IDLE_PORT})
-    if [ -n "${FAIL_PID}" ]; then
-        echo "> kill -9 $FAIL_PID"
-        kill -9 ${FAIL_PID}
-    fi
-    
-    # 로그 분석
-    echo "=========== 실패 원인 분석 (로그 스캔) ==========="
-    if grep -q "PortInUseException" $LOG_FILE || grep -q "BindException" $LOG_FILE; then
-        echo "❌ [Reason: Port] 포트($IDLE_PORT)가 이미 사용 중입니다."
-    
-    elif grep -q "AccessDenied" $LOG_FILE || grep -q "Connection refused" $LOG_FILE; then
-        echo "❌ [Reason: Database/Network] DB 연결 실패 또는 네트워크 문제입니다."
-        
-    elif grep -q "ClassNotFoundException" $LOG_FILE || grep -q "NoClassDefFoundError" $LOG_FILE; then
-        echo "❌ [Reason: Artifact] 빌드된 JAR 파일에 문제가 있습니다 (클래스 누락)."
-        
-    elif grep -q "Error creating bean" $LOG_FILE; then
-        echo "❌ [Reason: Config/Bean] 스프링 빈 생성 실패 (설정 오류 가능성)."
-        
-    else
-        echo "❌ [Reason: Unknown] 로그 파일($LOG_FILE)을 직접 확인해주세요."
-    fi
-    echo "================================================="
-    
-    echo "=========== 실행 로그 (마지막 100줄) ==========="
-    tail -n 100 $LOG_FILE
-    echo "==========================================="
+# 7. docker-compose로 컨테이너 실행
+echo "> Docker Compose로 애플리케이션 시작 (환경 변수 주입)"
+if [ ! -f "$REPOSITORY/docker-compose.yml" ]; then
+    echo "❌ [Error] docker-compose.yml 파일을 찾을 수 없습니다."
     exit 1
-else
-    echo "> ✅ 배포 성공 (PID: $CURRENT_PID)"
 fi
+
+# docker-compose 실행 (detached mode)
+# .env 파일의 환경 변수들을 컨테이너에 주입
+docker compose up -d
