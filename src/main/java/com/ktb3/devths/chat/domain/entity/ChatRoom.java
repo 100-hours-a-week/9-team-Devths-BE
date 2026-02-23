@@ -74,6 +74,10 @@ public class ChatRoom {
 		this.currentCount = Math.max(0, this.currentCount - 1);
 	}
 
+	public void incrementCount() {
+		this.currentCount++;
+	}
+
 	public void softDelete() {
 		this.isDeleted = true;
 		this.deletedAt = LocalDateTime.now();

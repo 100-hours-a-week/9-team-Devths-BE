@@ -22,6 +22,7 @@ import com.ktb3.devths.chat.dto.response.ChatRoomSummaryResponse;
 import com.ktb3.devths.chat.dto.response.ChatRoomUpdateResponse;
 import com.ktb3.devths.chat.dto.response.PrivateChatRoomCreateResponse;
 import com.ktb3.devths.chat.repository.ChatMemberRepository;
+import com.ktb3.devths.chat.repository.ChatMessageRepository;
 import com.ktb3.devths.chat.repository.ChatPrivateRoomRepository;
 import com.ktb3.devths.chat.repository.ChatRoomRepository;
 import com.ktb3.devths.global.exception.CustomException;
@@ -50,6 +51,7 @@ public class ChatRoomService {
 	private final ChatRoomRepository chatRoomRepository;
 	private final ChatPrivateRoomRepository chatPrivateRoomRepository;
 	private final ChatMemberRepository chatMemberRepository;
+	private final ChatMessageRepository chatMessageRepository;
 	private final S3AttachmentRepository s3AttachmentRepository;
 	private final UserRepository userRepository;
 
@@ -114,6 +116,19 @@ public class ChatRoomService {
 		Optional<ChatPrivateRoom> existingRoom = chatPrivateRoomRepository.findByDmKey(dmKey);
 		if (existingRoom.isPresent()) {
 			ChatRoom room = existingRoom.get().getRoom();
+
+			Optional<ChatMember> currentMemberOpt = chatMemberRepository.findByChatRoomIdAndUserId(
+				room.getId(), currentUserId);
+			if (currentMemberOpt.isEmpty()) {
+				ChatMember rejoinMember = ChatMember.builder()
+					.chatRoom(room)
+					.user(currentUser)
+					.roomName(targetUser.getNickname())
+					.build();
+				chatMemberRepository.save(rejoinMember);
+				room.incrementCount();
+			}
+
 			log.info("기존 1:1 채팅방 반환: roomId={}, dmKey={}", room.getId(), dmKey);
 			return new PrivateChatRoomCreateResponse(
 				room.getId(),
@@ -251,7 +266,9 @@ public class ChatRoomService {
 		chatRoom.decrementCount();
 
 		if (chatRoom.getCurrentCount() <= 0) {
-			chatRoom.softDelete();
+			chatMessageRepository.deleteByChatRoomId(roomId);
+			chatPrivateRoomRepository.deleteById(roomId);
+			chatRoomRepository.delete(chatRoom);
 		}
 	}
 

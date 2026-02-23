@@ -1,10 +1,12 @@
 package com.ktb3.devths.chat.service;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.springframework.data.domain.PageRequest;
@@ -13,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ktb3.devths.chat.domain.constant.ChatMessageTypes;
+import com.ktb3.devths.chat.domain.constant.ChatRoomTypes;
 import com.ktb3.devths.chat.domain.entity.ChatMember;
 import com.ktb3.devths.chat.domain.entity.ChatMessage;
 import com.ktb3.devths.chat.domain.entity.ChatRoom;
@@ -22,6 +25,7 @@ import com.ktb3.devths.chat.dto.response.ChatMessageResponse;
 import com.ktb3.devths.chat.dto.response.ChatRoomNotification;
 import com.ktb3.devths.chat.repository.ChatMemberRepository;
 import com.ktb3.devths.chat.repository.ChatMessageRepository;
+import com.ktb3.devths.chat.repository.ChatPrivateRoomRepository;
 import com.ktb3.devths.chat.repository.ChatRoomRepository;
 import com.ktb3.devths.global.exception.CustomException;
 import com.ktb3.devths.global.response.ErrorCode;
@@ -45,6 +49,7 @@ public class ChatMessageService {
 	private static final int MAX_PAGE_SIZE = 100;
 
 	private final ChatRoomRepository chatRoomRepository;
+	private final ChatPrivateRoomRepository chatPrivateRoomRepository;
 	private final ChatMemberRepository chatMemberRepository;
 	private final ChatMessageRepository chatMessageRepository;
 	private final UserRepository userRepository;
@@ -63,9 +68,12 @@ public class ChatMessageService {
 		int pageSize = (size == null || size <= 0) ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
 		Pageable pageable = PageRequest.of(0, pageSize + 1);
 
+		LocalDateTime joinedAt = member.getJoinedAt();
+
 		List<ChatMessage> messages = (lastId == null)
-			? chatMessageRepository.findByChatRoomIdOrderByIdDesc(roomId, pageable)
-			: chatMessageRepository.findByChatRoomIdAndIdLessThanOrderByIdDesc(roomId, lastId, pageable);
+			? chatMessageRepository.findByChatRoomIdAndCreatedAtAfterOrderByIdDesc(roomId, joinedAt, pageable)
+			: chatMessageRepository.findByChatRoomIdAndIdLessThanAndCreatedAtAfterOrderByIdDesc(roomId, lastId,
+			joinedAt, pageable);
 
 		boolean hasNext = messages.size() > pageSize;
 		List<ChatMessage> actualMessages = hasNext
@@ -104,6 +112,26 @@ public class ChatMessageService {
 
 		User sender = userRepository.findByIdAndIsWithdrawFalse(senderId)
 			.orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+		if (chatRoom.getType() == ChatRoomTypes.PRIVATE) {
+			chatPrivateRoomRepository.findById(chatRoom.getId()).ifPresent(privateRoom -> {
+				User otherUser = privateRoom.getUser1().getId().equals(senderId)
+					? privateRoom.getUser2()
+					: privateRoom.getUser1();
+
+				Optional<ChatMember> otherMemberOpt = chatMemberRepository.findByChatRoomIdAndUserId(
+					chatRoom.getId(), otherUser.getId());
+				if (otherMemberOpt.isEmpty()) {
+					ChatMember rejoinMember = ChatMember.builder()
+						.chatRoom(chatRoom)
+						.user(otherUser)
+						.roomName(sender.getNickname())
+						.build();
+					chatMemberRepository.save(rejoinMember);
+					chatRoom.incrementCount();
+				}
+			});
+		}
 
 		ChatMessageTypes messageType;
 		try {
