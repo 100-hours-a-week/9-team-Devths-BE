@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ktb3.devths.notification.domain.constant.NotificationCategory;
@@ -14,6 +15,7 @@ import com.ktb3.devths.notification.dto.response.NotificationListResponse;
 import com.ktb3.devths.notification.dto.response.UnreadCountResponse;
 import com.ktb3.devths.notification.repository.NotificationRepository;
 import com.ktb3.devths.user.domain.entity.User;
+import com.ktb3.devths.user.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,8 +29,9 @@ public class NotificationService {
 	private static final int MAX_PAGE_SIZE = 100;
 
 	private final NotificationRepository notificationRepository;
+	private final UserRepository userRepository;
 
-	@Transactional
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public Notification createAnalysisCompleteNotification(User recipient, Long roomId, String summary) {
 		Notification notification = Notification.builder()
 			.recipient(recipient)
@@ -43,6 +46,87 @@ public class NotificationService {
 
 		Notification savedNotification = notificationRepository.save(notification);
 		log.info("분석 완료 알림 생성: recipientId={}, roomId={}", recipient.getId(), roomId);
+
+		return savedNotification;
+	}
+
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
+	public Notification createFollowNotification(User recipient, Long senderId, String senderNickname) {
+		Notification notification = Notification.builder()
+			.recipient(recipient)
+			.sender(userRepository.getReferenceById(senderId))
+			.category(NotificationCategory.ACTIVITY)
+			.type(NotificationType.FOLLOW)
+			.content(senderNickname + "님이 회원님을 팔로우했습니다.")
+			.targetPath("/users/" + senderId)
+			.resourceId(senderId)
+			.isRead(false)
+			.build();
+
+		Notification savedNotification = notificationRepository.save(notification);
+		log.info("팔로우 알림 생성: recipientId={}, senderId={}", recipient.getId(), senderId);
+
+		return savedNotification;
+	}
+
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
+	public Notification createPostCommentNotification(
+		User recipient,
+		Long senderId,
+		Long postId,
+		String senderNickname,
+		String previewContent
+	) {
+		Notification notification = Notification.builder()
+			.recipient(recipient)
+			.sender(userRepository.getReferenceById(senderId))
+			.category(NotificationCategory.BOARD)
+			.type(NotificationType.COMMENT)
+			.content(senderNickname + "님이 회원님의 게시물에 댓글을 남겼습니다.")
+			.targetPath("/board/" + postId)
+			.resourceId(postId)
+			.isRead(false)
+			.build();
+
+		Notification savedNotification = notificationRepository.save(notification);
+		log.info(
+			"댓글 알림 생성: recipientId={}, senderId={}, postId={}, previewLength={}",
+			recipient.getId(),
+			senderId,
+			postId,
+			previewContent == null ? 0 : previewContent.length()
+		);
+
+		return savedNotification;
+	}
+
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
+	public Notification createCommentReplyNotification(
+		User recipient,
+		Long senderId,
+		Long postId,
+		String senderNickname,
+		String previewContent
+	) {
+		Notification notification = Notification.builder()
+			.recipient(recipient)
+			.sender(userRepository.getReferenceById(senderId))
+			.category(NotificationCategory.BOARD)
+			.type(NotificationType.COMMENT)
+			.content(senderNickname + "님이 회원님의 댓글에 답글을 남겼습니다.")
+			.targetPath("/board/" + postId)
+			.resourceId(postId)
+			.isRead(false)
+			.build();
+
+		Notification savedNotification = notificationRepository.save(notification);
+		log.info(
+			"답글 알림 생성: recipientId={}, senderId={}, postId={}, previewLength={}",
+			recipient.getId(),
+			senderId,
+			postId,
+			previewContent == null ? 0 : previewContent.length()
+		);
 
 		return savedNotification;
 	}

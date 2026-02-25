@@ -1,8 +1,11 @@
 spring:
+  application:
+    name: devths-be
+
   datasource:
-    url: ${DB_URL}
+    url: ${DB_URL_V2}
     username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    password: ${DB_PASSWORD_V2}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: ${MAXIMUM_POOL_SIZE}
@@ -14,6 +17,15 @@ spring:
     hibernate:
       ddl-auto: ${SPRING_JPA_DDL_AUTO}
     show-sql: true
+
+  data:
+    redis:
+      host: ${REDIS_HOST_V2:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: ${REDIS_TIMEOUT:2000ms}
+      ssl:
+        enabled: ${REDIS_SSL:false}
 
   security:
     oauth2:
@@ -74,22 +86,28 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
       show-details: never
+  tracing:
+    sampling:
+      probability: 1.0  # 모든 요청 추적 (운영 환경에서는 0.1 정도로 조정)
+    propagation:
+      type: w3c  # W3C Trace Context 표준 사용 (traceparent, tracestate 헤더)
+      produce: w3c  # 외부로 나가는 요청에 W3C 헤더 추가
+      consume: w3c  # 외부에서 들어오는 W3C 헤더 읽기
+    enabled: true
+    baggage:
+      correlation:
+        enabled: true
+  otlp:
+    tracing:
+      endpoint: ${OTLP_ENDPOINT}
   metrics:
-    enable:
-      # 모든 메트릭 비활성화
-      all: false
-      # Hikari 커넥션 풀만 활성화
-      hikaricp: true
-    export:
-      cloudwatch:
-        namespace: ${CW_NAME_SPACE:devths-local}
-        step: 60s
-        enabled: ${CW_ENABLED:false}
-        batch-size: 20
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
 
 fastapi:
   base-url: ${FASTAPI_BASE_URL}
@@ -97,7 +115,22 @@ fastapi:
   poll-interval: 2000
   max-poll-attempts: 50
 
+chat:
+  websocket:
+    heartbeat-send-interval-ms: 10000
+    heartbeat-receive-interval-ms: 10000
+
+app:
+  cache:
+    enabled: true
+    post-detail:
+      enabled: true
+      ttl: 60s
+
 ratelimit:
+  backend: ${RATELIMIT_BACKEND:in-memory}
+  redis:
+    key-prefix: ${RATELIMIT_REDIS_KEY_PREFIX:ratelimit}
   google-calendar:
     bucket-capacity: ${RATELIMIT_GOOGLE_CALENDAR:100}
     enabled: true
@@ -107,8 +140,29 @@ ratelimit:
   fastapi:
     bucket-capacity: ${RATELIMIT_FASTAPI:10}
     enabled: true
+  fastapi-chat:
+    bucket-capacity: ${RATELIMIT_FASTAPI_CHAT:500}
+    enabled: true
+  fastapi-evaluation:
+    bucket-capacity: ${RATELIMIT_FASTAPI_EVALUATION:30}
+    enabled: true
   google-oauth:
     bucket-capacity: ${RATELIMIT_GOOGLE_OAUTH:50}
+    enabled: true
+  auth-token:
+    bucket-capacity: ${RATELIMIT_AUTH_TOKEN:100}
+    enabled: true
+  file-presigned:
+    bucket-capacity: ${RATELIMIT_FILE_PRESIGNED:100}
+    enabled: true
+  file-attachment:
+    bucket-capacity: ${RATELIMIT_FILE_ATTACHMENT:200}
+    enabled: true
+  board-write:
+    bucket-capacity: ${RATELIMIT_BOARD_WRITE:300}
+    enabled: true
+  social-action:
+    bucket-capacity: ${RATELIMIT_SOCIAL_ACTION:200}
     enabled: true
 
 async:
@@ -119,5 +173,9 @@ async:
 
 logging:
   level:
+    com.ktb3.devths: ${LOG_LEVEL_APP:INFO}
+    org.springframework.web: ${LOG_LEVEL_SPRING_WEB:INFO}
+    org.hibernate.SQL: ${LOG_LEVEL_HIBERNATE_SQL:WARN}
+    org.hibernate.type.descriptor.sql.BasicBinder: ${LOG_LEVEL_HIBERNATE_BINDER:OFF}
     com.ktb3.devths.ai.client.FastApiClient: ${LOG_LEVEL}
     com.ktb3.devths.ai.chatbot.service.AiChatMessageService: ${LOG_LEVEL}
