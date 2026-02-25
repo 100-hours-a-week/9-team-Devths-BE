@@ -44,6 +44,7 @@ jobs:
   lint:
     name: lint
     runs-on: ubuntu-22.04
+    if: ${{ !github.event.created }}
     permissions:
       contents: read
       checks: write
@@ -74,6 +75,7 @@ jobs:
   # CodeQL 기반 코드 정적 분석 실행
   static_analysis:
     runs-on: ubuntu-latest
+    if: ${{ !github.event.created }}
     permissions:
       security-events: write
       actions: read
@@ -246,7 +248,7 @@ jobs:
     name: notify-ci
     runs-on: ubuntu-22.04
     needs: [ lint, static_analysis, build ]
-    if: always()
+    if: always()&& !github.event.created
     steps:
       - name: Discord 빌드 알림
         uses: sarisia/actions-status-discord@v1
@@ -404,7 +406,7 @@ jobs:
     name: notify-cd
     runs-on: ubuntu-22.04
     needs: [ build, deploy ]
-    if: always()
+    if: always()&& !github.event.created
     steps:
       - name: Discord CD 결과 알림
         uses: sarisia/actions-status-discord@v1
