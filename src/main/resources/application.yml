@@ -45,7 +45,8 @@ spring:
         provider:
           google:
             authorization-uri: https://accounts.google.com/o/oauth2/v2/auth
-            token-uri: https://oauth2.googleapis.com/token
+            token-uri: ${GOOGLE_TOKEN_URI:https://oauth2.googleapis.com/token}
+            token-info-uri: ${GOOGLE_TOKEN_INFO_URI:https://www.googleapis.com/oauth2/v3/tokeninfo}
             user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
             user-name-attribute: sub
 
