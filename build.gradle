@@ -47,6 +47,9 @@ dependencies {
     implementation platform('io.opentelemetry.instrumentation:opentelemetry-instrumentation-bom-alpha:2.11.0-alpha')
     implementation 'io.opentelemetry.instrumentation:opentelemetry-jdbc'
 
+    // OpenTelemetry Manual Instrumentation for Lettuce (Redis)
+    implementation 'io.opentelemetry.instrumentation:opentelemetry-lettuce-5.1'
+
     // Google Calendar API
     implementation 'com.google.apis:google-api-services-calendar:v3-rev20250404-2.0.0'
     implementation 'com.google.api-client:google-api-client:2.8.0'
