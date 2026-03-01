@@ -86,12 +86,23 @@ jobs:
     needs: [ notify-approval-request ]
     environment:
       name: production-approval-1
+    outputs:
+      approval_time: ${{ steps.time.outputs.approval_time }}
+      approver: ${{ github.actor }}
     steps:
+      - name: 승인 시간 기록
+        id: time
+        run: |
+          APPROVAL_TIME=$(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M:%S KST')
+          echo "approval_time=$APPROVAL_TIME" >> $GITHUB_OUTPUT
+          echo "📅 승인 시간: $APPROVAL_TIME"
+
       - name: 1차 승인 완료
         run: |
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "✅ 1차 승인 완료"
           echo "승인자: ${{ github.actor }}"
+          echo "승인 시각: ${{ steps.time.outputs.approval_time }}"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       - name: Discord 1차 승인 완료 알림
@@ -103,7 +114,7 @@ jobs:
           title: '✅ 1차 승인 완료 (DevOps/TechLead)'
           description: |
             **1차 승인자**: ${{ github.actor }}
-            **승인 시각**: ${{ github.event.head_commit.timestamp }}
+            **승인 시각**: ${{ steps.time.outputs.approval_time }}
 
             **🐳 Docker 이미지**: `${{ inputs.ecr_name }}`
             **💬 배포 메모**: ${{ inputs.deployment_comment }}
@@ -124,12 +135,23 @@ jobs:
     needs: [ first-approval ]
     environment:
       name: production-approval-2
+    outputs:
+      approval_time: ${{ steps.time.outputs.approval_time }}
+      approver: ${{ github.actor }}
     steps:
+      - name: 승인 시간 기록
+        id: time
+        run: |
+          APPROVAL_TIME=$(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M:%S KST')
+          echo "approval_time=$APPROVAL_TIME" >> $GITHUB_OUTPUT
+          echo "📅 승인 시간: $APPROVAL_TIME"
+
       - name: 2차 승인 완료
         run: |
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "✅ 2차 승인 완료 - 배포 시작 가능"
           echo "승인자: ${{ github.actor }}"
+          echo "승인 시각: ${{ steps.time.outputs.approval_time }}"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       - name: Discord 2차 승인 완료 알림
@@ -141,7 +163,7 @@ jobs:
           content: '@everyone'
           description: |
             **2차 승인자**: ${{ github.actor }}
-            **승인 시각**: ${{ github.event.head_commit.timestamp }}
+            **승인 시각**: ${{ steps.time.outputs.approval_time }}
 
             **🐳 Docker 이미지**: `${{ inputs.ecr_name }}`
             **💬 배포 메모**: ${{ inputs.deployment_comment }}
@@ -334,7 +356,11 @@ jobs:
           description: |
             **배포 타입**: 수동 배포 (Manual)
             **환경**: 🚀 운영(PROD)
-            **트리거**: ${{ github.actor }}
+            **배포 요청자**: ${{ github.actor }}
+
+            **👥 승인 정보**:
+            - 1차 승인: ${{ needs.first-approval.outputs.approver }} (${{ needs.first-approval.outputs.approval_time }})
+            - 2차 승인: ${{ needs.second-approval.outputs.approver }} (${{ needs.second-approval.outputs.approval_time }})
 
             **🐳 Docker 이미지**: `${{ inputs.ecr_name }}`
             **🪣 S3 Key**: `BE/${{ github.ref_name }}/${{ inputs.ecr_name }}.zip`
@@ -369,7 +395,11 @@ jobs:
           description: |
             **배포 타입**: 수동 배포 (Manual)
             **환경**: 🚀 운영(PROD)
-            **취소자**: ${{ github.actor }}
+            **배포 요청자**: ${{ github.actor }}
+
+            **👥 승인 정보**:
+            - 1차 승인: ${{ needs.first-approval.outputs.approver || '미승인' }} (${{ needs.first-approval.outputs.approval_time || '-' }})
+            - 2차 승인: ${{ needs.second-approval.outputs.approver || '미승인' }} (${{ needs.second-approval.outputs.approval_time || '-' }})
 
             **🐳 Docker 이미지**: `${{ inputs.ecr_name }}`
             **🪣 S3 Key**: `BE/${{ github.ref_name }}/${{ inputs.ecr_name }}.zip`
