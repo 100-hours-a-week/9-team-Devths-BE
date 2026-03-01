@@ -46,7 +46,7 @@ case $DEVELOP in
     PARAM_PATH="/Stg/BE"
     SPRING_PROFILE="stg"
     ;;
-  main|master)
+  main|master|test/fix-운영용-파이프라인-수정)
     PARAM_PATH="/Prod/BE"
     SPRING_PROFILE="prod"
     ;;
