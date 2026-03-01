@@ -35,7 +35,7 @@ jobs:
   notify-approval-request:
     name: Notify Approval Request
     runs-on: ubuntu-22.04
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test/fix-운영용-파이프라인-수정'
     steps:
       - name: 요청 시간 기록
         id: request_time
@@ -46,14 +46,14 @@ jobs:
 
       - name: 브랜치 검증
         run: |
-          if [ "${{ github.ref_name }}" != "main" ]; then
+          if [ "${{ github.ref_name }}" != "main" ] && [ "${{ github.ref_name }}" != "test/fix-운영용-파이프라인-수정" ]; then
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "❌ 운영 배포는 main 브랜치에서만 실행 가능합니다."
+            echo "❌ 운영 배포는 main 또는 test/fix-운영용-파이프라인-수정 브랜치에서만 실행 가능합니다."
             echo "현재 브랜치: ${{ github.ref_name }}"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             exit 1
           fi
-          echo "✅ 브랜치 검증 완료: main"
+          echo "✅ 브랜치 검증 완료: ${{ github.ref_name }}"
 
       - name: Discord 승인 요청 알림
         uses: sarisia/actions-status-discord@v1
@@ -69,7 +69,8 @@ jobs:
             **🐳 Docker 이미지**: `${{ inputs.ecr_name }}`
             **🪣 S3 Key**: `BE/${{ github.ref_name }}/${{ inputs.ecr_name }}.zip`
             **💬 배포 메모**: ${{ inputs.deployment_comment }}
-            **🌍 환경**: 🚀 운영(PROD)
+            **🌍 환경**: ${{ github.ref_name == 'main' && '🚀 운영(PROD)' || '🧪 운영 테스트(PROD-TEST)' }}
+            **브랜치**: `${{ github.ref_name }}`
 
             ⏳ **2단계 교차 승인 대기 중...**
 
@@ -128,7 +129,8 @@ jobs:
 
             **🐳 Docker 이미지**: `${{ inputs.ecr_name }}`
             **💬 배포 메모**: ${{ inputs.deployment_comment }}
-            **🌍 환경**: 🚀 운영(PROD)
+            **🌍 환경**: ${{ github.ref_name == 'main' && '🚀 운영(PROD)' || '🧪 운영 테스트(PROD-TEST)' }}
+            **브랜치**: `${{ github.ref_name }}`
 
             ⏳ **2차 승인 대기 중...**
 
@@ -180,7 +182,8 @@ jobs:
 
             **🐳 Docker 이미지**: `${{ inputs.ecr_name }}`
             **💬 배포 메모**: ${{ inputs.deployment_comment }}
-            **🌍 환경**: 🚀 운영(PROD)
+            **🌍 환경**: ${{ github.ref_name == 'main' && '🚀 운영(PROD)' || '🧪 운영 테스트(PROD-TEST)' }}
+            **브랜치**: `${{ github.ref_name }}`
 
             🚀 **모든 승인 완료! 배포가 1분 후, 자동으로 시작됩니다.**
 
@@ -356,7 +359,7 @@ jobs:
   notify-discord:
     runs-on: ubuntu-22.04
     needs: [ first-approval, second-approval, deploy-production ]
-    if: ${{ always() && (github.ref_name == 'main' ) }}
+    if: ${{ always() && (github.ref_name == 'main' || github.ref_name == 'test/fix-운영용-파이프라인-수정') }}
     steps:
       - name: Discord 배포 결과 알림
         if: needs.deploy-production.result == 'success' || needs.deploy-production.result == 'failure'
@@ -407,7 +410,8 @@ jobs:
           content: '@everyone'
           description: |
             **배포 타입**: 수동 배포 (Manual)
-            **환경**: 🚀 운영(PROD)
+            **환경**: ${{ github.ref_name == 'main' && '🚀 운영(PROD)' || '🧪 운영 테스트(PROD-TEST)' }}
+            **브랜치**: `${{ github.ref_name }}`
             **배포 요청자**: ${{ github.actor }}
 
             **👥 승인 정보**:
