@@ -37,6 +37,13 @@ jobs:
     runs-on: ubuntu-22.04
     if: github.ref == 'refs/heads/main'
     steps:
+      - name: 요청 시간 기록
+        id: request_time
+        run: |
+          REQUEST_TIME=$(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M:%S KST')
+          echo "request_time=$REQUEST_TIME" >> $GITHUB_OUTPUT
+          echo "📅 요청 시간: $REQUEST_TIME"
+
       - name: 브랜치 검증
         run: |
           if [ "${{ github.ref_name }}" != "main" ]; then
@@ -57,7 +64,7 @@ jobs:
           title: '🔔 운영 배포 승인 요청'
           description: |
             **배포 요청자**: ${{ github.actor }}
-            **요청 시각**: ${{ github.event.created_at }}
+            **요청 시각**: ${{ steps.request_time.outputs.request_time }}
 
             **🐳 Docker 이미지**: `${{ inputs.ecr_name }}`
             **🪣 S3 Key**: `BE/${{ github.ref_name }}/${{ inputs.ecr_name }}.zip`
@@ -88,14 +95,17 @@ jobs:
       name: production-approval-1
     outputs:
       approval_time: ${{ steps.time.outputs.approval_time }}
-      approver: ${{ github.actor }}
+      approver: ${{ steps.time.outputs.approver }}
     steps:
       - name: 승인 시간 기록
         id: time
         run: |
           APPROVAL_TIME=$(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M:%S KST')
+          APPROVER="${{ github.actor }}"
           echo "approval_time=$APPROVAL_TIME" >> $GITHUB_OUTPUT
+          echo "approver=$APPROVER" >> $GITHUB_OUTPUT
           echo "📅 승인 시간: $APPROVAL_TIME"
+          echo "👤 승인자: $APPROVER"
 
       - name: 1차 승인 완료
         run: |
@@ -137,14 +147,17 @@ jobs:
       name: production-approval-2
     outputs:
       approval_time: ${{ steps.time.outputs.approval_time }}
-      approver: ${{ github.actor }}
+      approver: ${{ steps.time.outputs.approver }}
     steps:
       - name: 승인 시간 기록
         id: time
         run: |
           APPROVAL_TIME=$(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M:%S KST')
+          APPROVER="${{ github.actor }}"
           echo "approval_time=$APPROVAL_TIME" >> $GITHUB_OUTPUT
+          echo "approver=$APPROVER" >> $GITHUB_OUTPUT
           echo "📅 승인 시간: $APPROVAL_TIME"
+          echo "👤 승인자: $APPROVER"
 
       - name: 2차 승인 완료
         run: |
