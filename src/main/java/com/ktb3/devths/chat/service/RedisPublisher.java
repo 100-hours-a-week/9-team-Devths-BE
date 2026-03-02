@@ -72,38 +72,51 @@ public class RedisPublisher {
 	public void publishNotification(Long userId, ChatRoomNotification notification, String chatSessionId) {
 		String sanitizedUserId = LogSanitizer.sanitize(String.valueOf(userId));
 
-		Span publishSpan = tracer.spanBuilder()
-			.name("chat.notification.redis.publish")
-			.kind(Span.Kind.PRODUCER)
-			.tag("messaging.system", "redis")
-			.tag("messaging.destination", NOTIFY_PREFIX + userId)
-			.tag("chat.user.id", sanitizedUserId)
-			.tag("chat.room.id", String.valueOf(notification.roomId()))
-			.tag("chat.session.id", chatSessionId)
-			.start();
+		String originTraceId = resolveCurrentTraceId();
 
-		try (Tracer.SpanInScope spanInScope = tracer.withSpan(publishSpan)) {
-			String channel = NOTIFY_PREFIX + userId;
-			ChatRedisNotificationEnvelope envelope = new ChatRedisNotificationEnvelope(
-				new ChatRedisNotificationMeta(
-					NOTIFICATION_EVENT_TYPE,
-					userId,
-					notification.roomId(),
-					chatSessionId
-				),
-				buildTraceContext(publishSpan),
-				notification
-			);
-			String message = objectMapper.writeValueAsString(envelope);
-			redisTemplate.convertAndSend(channel, message);
+		try (Tracer.SpanInScope clearScope = tracer.withSpan(null)) {
+			Span publishSpan = tracer.spanBuilder()
+				.name("chat.notification.redis.publish")
+				.kind(Span.Kind.PRODUCER)
+				.tag("messaging.system", "redis")
+				.tag("messaging.destination", NOTIFY_PREFIX + userId)
+				.tag("chat.user.id", sanitizedUserId)
+				.tag("chat.room.id", String.valueOf(notification.roomId()))
+				.tag("chat.session.id", chatSessionId)
+				.tag("chat.origin.trace.id", originTraceId)
+				.start();
 
-			log.debug("Redis 알림 발행 성공: userId={}", sanitizedUserId);
-		} catch (Exception e) {
-			publishSpan.error(e);
-			log.error("Redis 알림 발행 실패: userId={}", sanitizedUserId, e);
-		} finally {
-			publishSpan.end();
+			try (Tracer.SpanInScope spanInScope = tracer.withSpan(publishSpan)) {
+				String channel = NOTIFY_PREFIX + userId;
+				ChatRedisNotificationEnvelope envelope = new ChatRedisNotificationEnvelope(
+					new ChatRedisNotificationMeta(
+						NOTIFICATION_EVENT_TYPE,
+						userId,
+						notification.roomId(),
+						chatSessionId
+					),
+					buildTraceContext(publishSpan),
+					notification
+				);
+				String message = objectMapper.writeValueAsString(envelope);
+				redisTemplate.convertAndSend(channel, message);
+
+				log.debug("Redis 알림 발행 성공: userId={}", sanitizedUserId);
+			} catch (Exception e) {
+				publishSpan.error(e);
+				log.error("Redis 알림 발행 실패: userId={}", sanitizedUserId, e);
+			} finally {
+				publishSpan.end();
+			}
 		}
+	}
+
+	private String resolveCurrentTraceId() {
+		Span currentSpan = tracer.currentSpan();
+		if (currentSpan != null && currentSpan.context() != null) {
+			return currentSpan.context().traceId();
+		}
+		return "unknown";
 	}
 
 	private ChatRedisTraceContext buildTraceContext(Span publishSpan) {
