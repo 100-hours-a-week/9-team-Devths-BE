@@ -1,0 +1,258 @@
+package com.ktb3.devths.user.service;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.ktb3.devths.global.exception.CustomException;
+import com.ktb3.devths.global.response.ErrorCode;
+import com.ktb3.devths.global.storage.domain.constant.RefType;
+import com.ktb3.devths.global.storage.repository.S3AttachmentRepository;
+import com.ktb3.devths.global.storage.service.S3StorageService;
+import com.ktb3.devths.user.domain.entity.Follow;
+import com.ktb3.devths.user.domain.entity.User;
+import com.ktb3.devths.user.domain.entity.UserStat;
+import com.ktb3.devths.user.dto.response.FollowResponse;
+import com.ktb3.devths.user.dto.response.FollowerListResponse;
+import com.ktb3.devths.user.dto.response.FollowerSummaryResponse;
+import com.ktb3.devths.user.dto.response.FollowingListResponse;
+import com.ktb3.devths.user.event.UserEventPublisher;
+import com.ktb3.devths.user.repository.FollowRepository;
+import com.ktb3.devths.user.repository.UserRepository;
+import com.ktb3.devths.user.repository.UserStatRepository;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class FollowService {
+
+	private static final int DEFAULT_PAGE_SIZE = 10;
+	private static final int MAX_PAGE_SIZE = 100;
+
+	private final UserRepository userRepository;
+	private final FollowRepository followRepository;
+	private final UserStatRepository userStatRepository;
+	private final S3AttachmentRepository s3AttachmentRepository;
+	private final S3StorageService s3StorageService;
+	private final UserEventPublisher userEventPublisher;
+
+	@Transactional
+	public FollowResponse follow(Long followerId, Long followingId) {
+		if (followerId.equals(followingId)) {
+			throw new CustomException(ErrorCode.SELF_FOLLOW_NOT_ALLOWED);
+		}
+
+		User followingUser = userRepository.findByIdAndIsWithdrawFalse(followingId)
+			.orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+		boolean alreadyFollowing = followRepository.existsByFollowerIdAndFollowingId(followerId, followingId);
+		if (alreadyFollowing) {
+			UserStat followerStat = getOrCreateUserStat(followerId);
+			return FollowResponse.of(followingId, followerStat.getFollowingCount());
+		}
+
+		User followerUser = userRepository.findByIdAndIsWithdrawFalse(followerId)
+			.orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+		Follow follow = Follow.builder()
+			.follower(followerUser)
+			.following(followingUser)
+			.build();
+
+		try {
+			followRepository.save(follow);
+		} catch (DataIntegrityViolationException e) {
+			UserStat followerStat = getOrCreateUserStat(followerId);
+			return FollowResponse.of(followingId, followerStat.getFollowingCount());
+		}
+
+		// 데드락 방지: userId 순서로 잠금
+		UserStat firstStat;
+		UserStat secondStat;
+
+		if (followerId < followingId) {
+			firstStat = getOrCreateUserStatForUpdate(followerUser);
+			secondStat = getOrCreateUserStatForUpdate(followingUser);
+			firstStat.incrementFollowingCount();
+			secondStat.incrementFollowerCount();
+		} else {
+			firstStat = getOrCreateUserStatForUpdate(followingUser);
+			secondStat = getOrCreateUserStatForUpdate(followerUser);
+			firstStat.incrementFollowerCount();
+			secondStat.incrementFollowingCount();
+		}
+
+		UserStat followerStat = followerId < followingId ? firstStat : secondStat;
+
+		log.info("팔로우 성공: followerId={}, followingId={}", followerId, followingId);
+		userEventPublisher.publishFollowed(followerId, followingId, followerUser.getNickname());
+
+		return FollowResponse.of(followingId, followerStat.getFollowingCount());
+	}
+
+	@Transactional
+	public void unfollow(Long followerId, Long followingId) {
+		if (followerId.equals(followingId)) {
+			throw new CustomException(ErrorCode.SELF_UNFOLLOW_NOT_ALLOWED);
+		}
+
+		userRepository.findByIdAndIsWithdrawFalse(followingId)
+			.orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+		Follow follow = followRepository.findByFollowerIdAndFollowingId(followerId, followingId)
+			.orElse(null);
+
+		if (follow == null) {
+			return;
+		}
+
+		followRepository.delete(follow);
+
+		// 데드락 방지: userId 순서로 잠금
+		if (followerId < followingId) {
+			getOrCreateUserStatForUpdate(followerId).decrementFollowingCount();
+			getOrCreateUserStatForUpdate(followingId).decrementFollowerCount();
+		} else {
+			getOrCreateUserStatForUpdate(followingId).decrementFollowerCount();
+			getOrCreateUserStatForUpdate(followerId).decrementFollowingCount();
+		}
+
+		log.info("언팔로우 성공: followerId={}, followingId={}", followerId, followingId);
+	}
+
+	@Transactional(readOnly = true)
+	public FollowerListResponse getMyFollowers(Long userId, Integer size, Long lastId) {
+		int pageSize = (size == null || size <= 0)
+			? DEFAULT_PAGE_SIZE
+			: Math.min(size, MAX_PAGE_SIZE);
+		Pageable pageable = PageRequest.of(0, pageSize + 1);
+
+		List<Follow> follows = (lastId == null)
+			? followRepository.findFollowersByUserId(userId, pageable)
+			: followRepository.findFollowersByUserIdAfterCursor(userId, lastId, pageable);
+
+		boolean hasNext = follows.size() > pageSize;
+		List<Follow> actualFollows = hasNext
+			? follows.subList(0, pageSize)
+			: follows;
+
+		List<Long> followerUserIds = actualFollows.stream()
+			.map(f -> f.getFollower().getId())
+			.toList();
+
+		Set<Long> followingBackIds = followerUserIds.isEmpty()
+			? new HashSet<>()
+			: new HashSet<>(followRepository.findFollowingIdsByFollowerIdAndFollowingIdIn(userId, followerUserIds));
+
+		Map<Long, String> profileImageUrlMap = buildProfileImageUrlMap(followerUserIds);
+
+		List<FollowerSummaryResponse> followers = actualFollows.stream()
+			.map(f -> {
+				User follower = f.getFollower();
+				String profileImageUrl = profileImageUrlMap.get(follower.getId());
+
+				return new FollowerSummaryResponse(
+					f.getId(),
+					follower.getId(),
+					follower.getNickname(),
+					profileImageUrl,
+					followingBackIds.contains(follower.getId())
+				);
+			})
+			.toList();
+
+		Long nextLastId = followers.isEmpty() ? null : followers.getLast().id();
+
+		return new FollowerListResponse(followers, hasNext, nextLastId);
+	}
+
+	@Transactional(readOnly = true)
+	public FollowingListResponse getMyFollowings(Long userId, Integer size, Long lastId, String nickname) {
+		int pageSize = (size == null || size <= 0)
+			? DEFAULT_PAGE_SIZE
+			: Math.min(size, MAX_PAGE_SIZE);
+		Pageable pageable = PageRequest.of(0, pageSize + 1);
+
+		String nicknameParam = (nickname == null || nickname.isBlank()) ? null : nickname;
+
+		List<Follow> follows = (lastId == null)
+			? followRepository.findFollowingsByUserId(userId, nicknameParam, pageable)
+			: followRepository.findFollowingsByUserIdAfterCursor(userId, nicknameParam, lastId, pageable);
+
+		boolean hasNext = follows.size() > pageSize;
+		List<Follow> actualFollows = hasNext
+			? follows.subList(0, pageSize)
+			: follows;
+
+		List<Long> followingUserIds = actualFollows.stream()
+			.map(f -> f.getFollowing().getId())
+			.toList();
+
+		Map<Long, String> profileImageUrlMap = buildProfileImageUrlMap(followingUserIds);
+
+		List<FollowerSummaryResponse> followings = actualFollows.stream()
+			.map(f -> {
+				User following = f.getFollowing();
+				String profileImageUrl = profileImageUrlMap.get(following.getId());
+
+				return new FollowerSummaryResponse(
+					f.getId(),
+					following.getId(),
+					following.getNickname(),
+					profileImageUrl,
+					true
+				);
+			})
+			.toList();
+
+		Long nextLastId = followings.isEmpty() ? null : followings.getLast().id();
+
+		return new FollowingListResponse(followings, hasNext, nextLastId);
+	}
+
+	private UserStat getOrCreateUserStat(Long userId) {
+		return userStatRepository.findByUserId(userId)
+			.orElseGet(() -> {
+				User user = userRepository.getReferenceById(userId);
+				return userStatRepository.save(UserStat.builder().user(user).build());
+			});
+	}
+
+	private UserStat getOrCreateUserStatForUpdate(User user) {
+		return getOrCreateUserStatForUpdate(user.getId());
+	}
+
+	private UserStat getOrCreateUserStatForUpdate(Long userId) {
+		return userStatRepository.findByUserIdForUpdate(userId)
+			.orElseGet(() -> {
+				User user = userRepository.getReferenceById(userId);
+				return userStatRepository.save(UserStat.builder().user(user).build());
+			});
+	}
+
+	private Map<Long, String> buildProfileImageUrlMap(List<Long> userIds) {
+		if (userIds.isEmpty()) {
+			return Map.of();
+		}
+
+		Map<Long, String> profileImageUrlMap = new HashMap<>();
+		s3AttachmentRepository.findByRefTypeAndRefIdInAndIsDeletedFalse(RefType.USER, userIds)
+			.forEach(attachment -> profileImageUrlMap.putIfAbsent(
+				attachment.getRefId(),
+				s3StorageService.getPublicUrl(attachment.getS3Key())
+			));
+
+		return profileImageUrlMap;
+	}
+}

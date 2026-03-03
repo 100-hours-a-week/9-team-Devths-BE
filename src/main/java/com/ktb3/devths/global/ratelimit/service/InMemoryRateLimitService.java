@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Service
+@ConditionalOnProperty(name = "ratelimit.backend", havingValue = "in-memory", matchIfMissing = true)
 @RequiredArgsConstructor
 public class InMemoryRateLimitService implements RateLimitService {
 
@@ -88,7 +90,14 @@ public class InMemoryRateLimitService implements RateLimitService {
 			case GOOGLE_CALENDAR -> properties.getGoogleCalendar().getBucketCapacity();
 			case GOOGLE_TASKS -> properties.getGoogleTasks().getBucketCapacity();
 			case FASTAPI_ANALYSIS -> properties.getFastapi().getBucketCapacity();
+			case FASTAPI_CHAT -> properties.getFastapiChat().getBucketCapacity();
+			case FASTAPI_EVALUATION -> properties.getFastapiEvaluation().getBucketCapacity();
 			case GOOGLE_OAUTH -> properties.getGoogleOauth().getBucketCapacity();
+			case AUTH_TOKEN -> properties.getAuthToken().getBucketCapacity();
+			case FILE_PRESIGNED -> properties.getFilePresigned().getBucketCapacity();
+			case FILE_ATTACHMENT -> properties.getFileAttachment().getBucketCapacity();
+			case BOARD_WRITE -> properties.getBoardWrite().getBucketCapacity();
+			case SOCIAL_ACTION -> properties.getSocialAction().getBucketCapacity();
 		};
 	}
 
@@ -97,7 +106,14 @@ public class InMemoryRateLimitService implements RateLimitService {
 			case GOOGLE_CALENDAR -> properties.getGoogleCalendar().isEnabled();
 			case GOOGLE_TASKS -> properties.getGoogleTasks().isEnabled();
 			case FASTAPI_ANALYSIS -> properties.getFastapi().isEnabled();
+			case FASTAPI_CHAT -> properties.getFastapiChat().isEnabled();
+			case FASTAPI_EVALUATION -> properties.getFastapiEvaluation().isEnabled();
 			case GOOGLE_OAUTH -> properties.getGoogleOauth().isEnabled();
+			case AUTH_TOKEN -> properties.getAuthToken().isEnabled();
+			case FILE_PRESIGNED -> properties.getFilePresigned().isEnabled();
+			case FILE_ATTACHMENT -> properties.getFileAttachment().isEnabled();
+			case BOARD_WRITE -> properties.getBoardWrite().isEnabled();
+			case SOCIAL_ACTION -> properties.getSocialAction().isEnabled();
 		};
 	}
 }

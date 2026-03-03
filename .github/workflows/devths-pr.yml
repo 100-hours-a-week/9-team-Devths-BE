@@ -1,15 +1,41 @@
-name: Devths-BE CI 파이프라인
+name: Devths-BE PR 파이프라인
 
 # dev/release/main 모두 진행
 on:
   pull_request:
     branches: [ develop, release/*, main ]
-
 # ENV 설정
 env:
   JAVA_VERSION: "21"
 
 jobs:
+  # 0. main 브랜치 보호: release/hotfix/*만 PR 허용
+  main-branch-guard:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: main PR 브랜치 검증
+        run: |
+          BASE="${{ github.event.pull_request.base.ref }}"
+          HEAD="${{ github.event.pull_request.head.ref }}"
+
+          echo "📌 대상 브랜치: $BASE"
+          echo "📌 소스 브랜치: $HEAD"
+
+          # main이 아닐 땐 통과
+          if [ "$BASE" != "main" ]; then
+            echo "✅ 브랜치 정책 통과 (main 아님)"
+            exit 0
+          fi
+
+          # main일 때 허용 브랜치: release/*, hotfix/*
+          if [[ "$HEAD" =~ ^release\/.+$ || "$HEAD" =~ ^hotfix\/.+$ ]]; then
+            echo "✅ 브랜치 정책 통과 (허용된 소스 브랜치)"
+            exit 0
+          fi
+
+          echo "❌ 정책 위반: main에는 release/* 또는 hotfix/* 브랜치만 PR 가능"
+          exit 1
+  
   # Lint 설정
   lint:
     name: lint

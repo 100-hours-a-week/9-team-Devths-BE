@@ -82,14 +82,14 @@ public class FastApiClient {
 			}
 
 			return response;
-
 		} catch (RestClientException e) {
-			log.error("FastAPI 작업 상태 조회 실패: taskId={}", taskId, e);
 			throw new CustomException(ErrorCode.FASTAPI_CONNECTION_FAILED);
 		}
 	}
 
 	public Flux<String> streamChatResponse(FastApiChatRequest request) {
+		rateLimitService.consumeToken(request.userId(), ApiType.FASTAPI_CHAT);
+
 		String url = fastApiProperties.getBaseUrl() + "/ai/chat";
 		return webClient.post()
 			.uri(url)
@@ -116,13 +116,15 @@ public class FastApiClient {
 	}
 
 	public Flux<String> streamInterviewEvaluation(FastApiInterviewEvaluationRequest request) {
-		String url = fastApiProperties.getBaseUrl() + "/ai/chat";
+		rateLimitService.consumeToken(request.value().userId(), ApiType.FASTAPI_EVALUATION);
+
+		String url = fastApiProperties.getBaseUrl() + "/ai/evaluation/analyze";
 
 		// 메타데이터만 로깅 (민감 정보 제외)
-		log.info("면접 평가 요청 - interviewId={}, type={}, messageCount={}",
-			LogSanitizer.sanitize(String.valueOf(request.interviewId())),
-			request.interviewType(),
-			request.messages().size());
+		log.info("면접 평가 요청 - sessionId={}, type={}, contextCount={}",
+			LogSanitizer.sanitize(String.valueOf(request.value().sessionId())),
+			request.value().interviewType(),
+			request.value().context().size());
 
 		return webClient.post()
 			.uri(url)
