@@ -47,6 +47,8 @@ public class ChatMessageService {
 
 	private static final int DEFAULT_PAGE_SIZE = 20;
 	private static final int MAX_PAGE_SIZE = 100;
+	private static final String DELETED_MESSAGE_PREVIEW = "삭제된 메시지입니다.";
+	private static final String DEFAULT_CHAT_SESSION_ID = "unknown";
 
 	private final ChatRoomRepository chatRoomRepository;
 	private final ChatPrivateRoomRepository chatPrivateRoomRepository;
@@ -103,7 +105,7 @@ public class ChatMessageService {
 	}
 
 	@Transactional
-	public ChatMessageResponse sendMessage(Long senderId, ChatMessageRequest request) {
+	public ChatMessageResponse sendMessage(Long senderId, ChatMessageRequest request, String chatSessionId) {
 		ChatRoom chatRoom = chatRoomRepository.findByIdAndIsDeletedFalse(request.roomId())
 			.orElseThrow(() -> new CustomException(ErrorCode.CHATROOM_NOT_FOUND));
 
@@ -140,7 +142,7 @@ public class ChatMessageService {
 			throw new CustomException(ErrorCode.INVALID_REQUEST);
 		}
 
-		String entityContent = (messageType == ChatMessageTypes.IMAGE)
+		String entityContent = (messageType == ChatMessageTypes.IMAGE || messageType == ChatMessageTypes.PDF)
 			? request.s3Key()
 			: request.content();
 
@@ -153,20 +155,22 @@ public class ChatMessageService {
 
 		chatMessageRepository.save(chatMessage);
 
-		String lastMessagePreview = (messageType == ChatMessageTypes.IMAGE)
-			? "[이미지]"
-			: request.content();
+		String lastMessagePreview = switch (messageType) {
+			case IMAGE -> "[이미지]";
+			case PDF -> "[PDF]";
+			default -> request.content();
+		};
 		chatRoom.updateLastMessage(lastMessagePreview, chatMessage.getCreatedAt());
 
 		ChatMessageResponse response = buildResponse(chatMessage, sender);
 
-		redisPublisher.publish(request.roomId(), response);
+		redisPublisher.publish(request.roomId(), response, chatSessionId);
 
 		ChatRoomNotification notification = new ChatRoomNotification(
 			request.roomId(), lastMessagePreview, chatMessage.getCreatedAt());
 		List<Long> memberUserIds = chatMemberRepository.findUserIdsByChatRoomId(request.roomId());
 		for (Long memberUserId : memberUserIds) {
-			redisPublisher.publishNotification(memberUserId, notification);
+			redisPublisher.publishNotification(memberUserId, notification, chatSessionId);
 		}
 
 		log.info("채팅 메시지 저장: roomId={}, senderId={}, type={}", request.roomId(), senderId, messageType);
@@ -176,7 +180,7 @@ public class ChatMessageService {
 
 	@Transactional
 	public void deleteMessage(Long userId, Long roomId, Long messageId) {
-		chatRoomRepository.findByIdAndIsDeletedFalse(roomId)
+		ChatRoom chatRoom = chatRoomRepository.findByIdAndIsDeletedFalse(roomId)
 			.orElseThrow(() -> new CustomException(ErrorCode.CHATROOM_NOT_FOUND));
 
 		chatMemberRepository.findByChatRoomIdAndUserId(roomId, userId)
@@ -190,7 +194,22 @@ public class ChatMessageService {
 			throw new CustomException(ErrorCode.CHAT_MESSAGE_ACCESS_DENIED);
 		}
 
+		boolean isLatestMessage = chatMessageRepository.findTopByChatRoomIdOrderByIdDesc(roomId)
+			.map(latestMessage -> latestMessage.getId().equals(messageId))
+			.orElse(false);
+
 		message.softDelete();
+
+		if (isLatestMessage) {
+			chatRoom.updateLastMessage(DELETED_MESSAGE_PREVIEW, message.getCreatedAt());
+
+			ChatRoomNotification notification = new ChatRoomNotification(
+				roomId, DELETED_MESSAGE_PREVIEW, message.getCreatedAt());
+			List<Long> memberUserIds = chatMemberRepository.findUserIdsByChatRoomId(roomId);
+			for (Long memberUserId : memberUserIds) {
+				redisPublisher.publishNotification(memberUserId, notification, DEFAULT_CHAT_SESSION_ID);
+			}
+		}
 
 		log.info("채팅 메시지 삭제: roomId={}, messageId={}", LogSanitizer.sanitize(String.valueOf(roomId)),
 			LogSanitizer.sanitize(String.valueOf(messageId)));
@@ -220,7 +239,7 @@ public class ChatMessageService {
 
 	private ChatMessageResponse buildHistoryResponse(ChatMessage message, Map<Long, String> profileImageMap) {
 		boolean isDeleted = message.isDeleted();
-		boolean isImage = message.getType() == ChatMessageTypes.IMAGE;
+		boolean hasS3Key = message.getType() == ChatMessageTypes.IMAGE || message.getType() == ChatMessageTypes.PDF;
 
 		ChatMessageResponse.Sender senderDto = null;
 		if (message.getSender() != null) {
@@ -229,17 +248,17 @@ public class ChatMessageService {
 			senderDto = new ChatMessageResponse.Sender(sender.getId(), sender.getNickname(), profileImage);
 		}
 
-		String content = isDeleted ? null : (isImage ? null : message.getContent());
-		String imageUrl = isDeleted ? null : (isImage ? s3StorageService.getPublicUrl(message.getContent()) : null);
+		String content = isDeleted ? null : (hasS3Key ? null : message.getContent());
+		String s3Url = isDeleted ? null : (hasS3Key ? s3StorageService.getPublicUrl(message.getContent()) : null);
 
 		return new ChatMessageResponse(
 			message.getId(), senderDto, message.getType().name(),
-			content, imageUrl, message.getCreatedAt(), isDeleted
+			content, s3Url, message.getCreatedAt(), isDeleted
 		);
 	}
 
 	private ChatMessageResponse buildResponse(ChatMessage message, User sender) {
-		boolean isImage = message.getType() == ChatMessageTypes.IMAGE;
+		boolean hasS3Key = message.getType() == ChatMessageTypes.IMAGE || message.getType() == ChatMessageTypes.PDF;
 
 		String profileImage = s3AttachmentRepository
 			.findTopByRefTypeAndRefIdAndIsDeletedFalseOrderByCreatedAtDesc(RefType.USER, sender.getId())
@@ -256,8 +275,8 @@ public class ChatMessageService {
 			message.getId(),
 			senderDto,
 			message.getType().name(),
-			isImage ? null : message.getContent(),
-			isImage ? s3StorageService.getPublicUrl(message.getContent()) : null,
+			hasS3Key ? null : message.getContent(),
+			hasS3Key ? s3StorageService.getPublicUrl(message.getContent()) : null,
 			message.getCreatedAt(),
 			false
 		);

@@ -8,21 +8,31 @@ import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.actuate.autoconfigure.tracing.ConditionalOnEnabledTracing;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.data.redis.LettuceClientConfigurationBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.server.observation.ServerRequestObservationContext;
 import org.springframework.util.AntPathMatcher;
 import org.springframework.util.PathMatcher;
 
+import io.lettuce.core.resource.ClientResources;
 import io.micrometer.observation.ObservationPredicate;
 import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.observation.aop.ObservedAspect;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.instrumentation.jdbc.datasource.JdbcTelemetry;
+import io.opentelemetry.instrumentation.lettuce.v5_1.LettuceTelemetry;
+import jakarta.annotation.PostConstruct;
+import reactor.core.publisher.Hooks;
 
 @Configuration
 @ConditionalOnEnabledTracing
 public class TracingConfig {
+
+	@PostConstruct
+	public void enableReactorContextPropagation() {
+		Hooks.enableAutomaticContextPropagation();
+	}
 
 	private static final List<String> EXCLUDED_PATHS = List.of(
 		"/actuator/**",
@@ -68,5 +78,18 @@ public class TracingConfig {
 				return bean;
 			}
 		};
+	}
+
+	/**
+	 * Lettuce Redis 클라이언트를 OpenTelemetry로 계측하여 Redis 명령어 추적
+	 */
+	@Bean
+	@ConditionalOnClass(name = "io.opentelemetry.instrumentation.lettuce.v5_1.LettuceTelemetry")
+	public LettuceClientConfigurationBuilderCustomizer lettuceTracingCustomizer(OpenTelemetry openTelemetry) {
+		return builder -> builder.clientResources(
+			ClientResources.builder()
+				.tracing(LettuceTelemetry.create(openTelemetry).newTracing())
+				.build()
+		);
 	}
 }

@@ -10,6 +10,7 @@ import org.springframework.web.client.RestClient;
 import com.ktb3.devths.auth.dto.internal.GoogleIdTokenPayload;
 import com.ktb3.devths.auth.dto.internal.GoogleTokenResponse;
 import com.ktb3.devths.global.config.properties.GoogleOAuthProperties;
+import com.ktb3.devths.global.config.properties.GoogleOAuthProviderProperties;
 import com.ktb3.devths.global.exception.CustomException;
 import com.ktb3.devths.global.response.ErrorCode;
 
@@ -18,13 +19,11 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Service
-@EnableConfigurationProperties(GoogleOAuthProperties.class)
+@EnableConfigurationProperties({GoogleOAuthProperties.class, GoogleOAuthProviderProperties.class})
 @RequiredArgsConstructor
 public class GoogleOAuthService {
-	private static final String GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
-	private static final String GOOGLE_TOKEN_INFO_URL = "https://oauth2.googleapis.com/tokeninfo";
-
 	private final GoogleOAuthProperties googleOAuthProperties;
+	private final GoogleOAuthProviderProperties googleOAuthProviderProperties;
 	private final RestClient restClient;
 
 	/**
@@ -43,7 +42,7 @@ public class GoogleOAuthService {
 			params.add("grant_type", "authorization_code");
 
 			GoogleTokenResponse response = restClient.post()
-				.uri(GOOGLE_TOKEN_URL)
+				.uri(googleOAuthProviderProperties.getTokenUri())
 				.contentType(MediaType.APPLICATION_FORM_URLENCODED)
 				.body(params)
 				.retrieve()
@@ -79,7 +78,7 @@ public class GoogleOAuthService {
 			params.add("grant_type", "refresh_token");
 
 			GoogleTokenResponse response = restClient.post()
-				.uri(GOOGLE_TOKEN_URL)
+				.uri(googleOAuthProviderProperties.getTokenUri())
 				.contentType(MediaType.APPLICATION_FORM_URLENCODED)
 				.body(params)
 				.retrieve()
@@ -109,7 +108,7 @@ public class GoogleOAuthService {
 	public GoogleIdTokenPayload verifyIdToken(String idToken) {
 		try {
 			GoogleIdTokenPayload payload = restClient.get()
-				.uri(GOOGLE_TOKEN_INFO_URL + "?id_token=" + idToken)
+				.uri(googleOAuthProviderProperties.getTokenInfoUri() + "?id_token=" + idToken)
 				.retrieve()
 				.body(GoogleIdTokenPayload.class);
 

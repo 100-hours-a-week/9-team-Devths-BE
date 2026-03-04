@@ -1,6 +1,6 @@
 spring:
   application:
-    name: devths-be
+    name: devths-be-${SPRING_PROFILES_ACTIVE:local}
 
   datasource:
     url: ${DB_URL_V2}
@@ -16,7 +16,8 @@ spring:
   jpa:
     hibernate:
       ddl-auto: ${SPRING_JPA_DDL_AUTO}
-    show-sql: true
+    show-sql: false
+    open-in-view: false
 
   data:
     redis:
@@ -45,7 +46,8 @@ spring:
         provider:
           google:
             authorization-uri: https://accounts.google.com/o/oauth2/v2/auth
-            token-uri: https://oauth2.googleapis.com/token
+            token-uri: ${GOOGLE_TOKEN_URI:https://oauth2.googleapis.com/token}
+            token-info-uri: ${GOOGLE_TOKEN_INFO_URI:https://www.googleapis.com/oauth2/v3/tokeninfo}
             user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
             user-name-attribute: sub
 
@@ -117,14 +119,14 @@ fastapi:
 
 chat:
   websocket:
-    heartbeat-send-interval-ms: 10000
-    heartbeat-receive-interval-ms: 10000
+    heartbeat-send-interval-ms: 25000
+    heartbeat-receive-interval-ms: 25000
 
 app:
   cache:
-    enabled: true
+    enabled: false
     post-detail:
-      enabled: true
+      enabled: false
       ttl: 60s
 
 ratelimit:
@@ -173,9 +175,4 @@ async:
 
 logging:
   level:
-    com.ktb3.devths: ${LOG_LEVEL_APP:INFO}
-    org.springframework.web: ${LOG_LEVEL_SPRING_WEB:INFO}
-    org.hibernate.SQL: ${LOG_LEVEL_HIBERNATE_SQL:WARN}
-    org.hibernate.type.descriptor.sql.BasicBinder: ${LOG_LEVEL_HIBERNATE_BINDER:OFF}
-    com.ktb3.devths.ai.client.FastApiClient: ${LOG_LEVEL}
-    com.ktb3.devths.ai.chatbot.service.AiChatMessageService: ${LOG_LEVEL}
+    com.ktb3.devths: ${LOG_LEVEL}
