@@ -124,9 +124,9 @@ chat:
 
 app:
   cache:
-    enabled: {APP_CACHE_ENABLE}
+    enabled: ${APP_CACHE_ENABLE}
     post-detail:
-      enabled: {POST_DETAIL_CACHE_ENABLE}
+      enabled: ${POST_DETAIL_CACHE_ENABLE}
       ttl: 60s
 
 ratelimit:
