@@ -46,6 +46,8 @@ public class PostDetailCacheService {
 				return Optional.of(response);
 			}
 
+			log.warn("PostDetail 캐시 타입 불일치: expected=PostDetailResponse, actual={}",
+				value != null ? value.getClass().getName() : "null");
 			return Optional.empty();
 		} catch (Exception e) {
 			log.warn("PostDetail 캐시 조회 실패: postId={}, userId={}", postId, userId, e);
