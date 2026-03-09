@@ -28,10 +28,8 @@ do
   else
     # Health Check API 호출
     RESPONSE=$(curl -s "$HEALTH_URL" || true)
-    UP_COUNT=$(echo "${RESPONSE}" | grep -cE '"status"[[:space:]]*:[[:space:]]*"UP"' || echo "0")
 
-    if [ "${UP_COUNT}" -ge 1 ]
-    then
+    if echo "${RESPONSE}" | grep -qE '"status"[[:space:]]*:[[:space:]]*"UP"'; then
         echo "> ✅ Health Check 성공"
         exit 0
     else
