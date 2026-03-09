@@ -3,6 +3,8 @@ package com.ktb3.devths.ai.chatbot.service.facade;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 
+import com.ktb3.devths.ai.chatbot.dto.internal.EvaluationPrepareResult;
+import com.ktb3.devths.ai.chatbot.dto.internal.StreamPrepareResult;
 import com.ktb3.devths.ai.chatbot.dto.request.AiChatMessageRequest;
 import com.ktb3.devths.ai.chatbot.dto.request.InterviewEvaluationRequest;
 import com.ktb3.devths.ai.chatbot.service.AiChatInterviewService;
@@ -26,13 +28,10 @@ public class AiChatStreamFacade {
 	public Flux<ServerSentEvent<String>> sendMessageStream(Long userId, Long roomId, AiChatMessageRequest request) {
 		aiChatRoomService.getOwnedRoomOrThrow(userId, roomId);
 
-		Flux<String> chatStream = aiChatMessageService.streamChatResponse(
-			userId,
-			roomId,
-			request.content(),
-			request.model(),
-			request.interviewId()
-		);
+		StreamPrepareResult prepared = aiChatMessageService.prepareStreamContext(
+			userId, roomId, request.content(), request.model(), request.interviewId());
+
+		Flux<String> chatStream = aiChatMessageService.streamChatResponse(prepared);
 		return toSseStream(chatStream);
 	}
 
@@ -44,7 +43,11 @@ public class AiChatStreamFacade {
 		aiChatRoomService.getOwnedRoomOrThrow(userId, roomId);
 
 		boolean retry = request.retry() != null && request.retry();
-		Flux<String> evaluationStream = aiChatInterviewService.evaluateInterview(request.interviewId(), retry);
+
+		EvaluationPrepareResult prepared = aiChatInterviewService.prepareEvaluation(
+			request.interviewId(), retry);
+
+		Flux<String> evaluationStream = aiChatInterviewService.streamEvaluation(prepared);
 		return toSseStream(evaluationStream);
 	}
 
