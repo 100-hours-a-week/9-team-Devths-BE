@@ -3,6 +3,7 @@ package com.ktb3.devths.notification.controller;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -40,5 +41,15 @@ public class FcmTokenController {
 
 		return ResponseEntity.status(HttpStatus.CREATED)
 			.body(ApiResponse.success("푸시 토큰이 성공적으로 등록되었습니다.", response));
+	}
+
+	@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204")
+	@DeleteMapping("/{deviceId}")
+	public ResponseEntity<Void> deleteToken(
+		@AuthenticationPrincipal UserPrincipal userPrincipal,
+		@PathVariable String deviceId
+	) {
+		fcmTokenService.deleteToken(userPrincipal.getUserId(), deviceId);
+		return ResponseEntity.noContent().build();
 	}
 }

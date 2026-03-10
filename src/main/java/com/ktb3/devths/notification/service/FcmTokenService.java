@@ -48,4 +48,17 @@ public class FcmTokenService {
 
 		return FcmTokenRegisterResponse.from(fcmToken);
 	}
+
+	@Transactional
+	public void deleteToken(Long userId, String deviceId) {
+		FcmToken fcmToken = fcmTokenRepository.findByDeviceId(deviceId)
+			.orElseThrow(() -> new CustomException(ErrorCode.FCM_TOKEN_NOT_FOUND));
+
+		if (!fcmToken.getUser().getId().equals(userId)) {
+			throw new CustomException(ErrorCode.FCM_TOKEN_ACCESS_DENIED);
+		}
+
+		fcmTokenRepository.delete(fcmToken);
+		log.info("FCM 토큰 삭제: userId={}", userId);
+	}
 }
