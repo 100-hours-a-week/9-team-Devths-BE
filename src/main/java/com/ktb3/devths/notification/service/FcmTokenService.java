@@ -7,7 +7,9 @@ import com.ktb3.devths.global.exception.CustomException;
 import com.ktb3.devths.global.response.ErrorCode;
 import com.ktb3.devths.notification.domain.entity.FcmToken;
 import com.ktb3.devths.notification.dto.request.FcmTokenRegisterRequest;
+import com.ktb3.devths.notification.dto.request.FcmTokenUpdateRequest;
 import com.ktb3.devths.notification.dto.response.FcmTokenRegisterResponse;
+import com.ktb3.devths.notification.dto.response.FcmTokenUpdateResponse;
 import com.ktb3.devths.notification.repository.FcmTokenRepository;
 import com.ktb3.devths.user.domain.entity.User;
 import com.ktb3.devths.user.repository.UserRepository;
@@ -60,5 +62,17 @@ public class FcmTokenService {
 
 		fcmTokenRepository.delete(fcmToken);
 		log.info("FCM 토큰 삭제: userId={}", userId);
+	}
+
+	@Transactional
+	public FcmTokenUpdateResponse updateTokenActive(Long userId, String deviceId,
+		FcmTokenUpdateRequest request) {
+		FcmToken fcmToken = fcmTokenRepository.findByUserIdAndDeviceId(userId, deviceId)
+			.orElseThrow(() -> new CustomException(ErrorCode.FCM_TOKEN_NOT_FOUND));
+
+		fcmToken.updateActive(request.isActive());
+		log.info("FCM 토큰 알림 설정 변경: userId={}", userId);
+
+		return FcmTokenUpdateResponse.from(fcmToken);
 	}
 }

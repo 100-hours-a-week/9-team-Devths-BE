@@ -67,6 +67,10 @@ public class FcmToken {
 		this.lastUsedAt = LocalDateTime.now();
 	}
 
+	public void updateActive(Boolean isActive) {
+		this.isActive = isActive;
+	}
+
 	@Column(name = "created_at", nullable = false)
 	@CreatedDate
 	private LocalDateTime createdAt;
