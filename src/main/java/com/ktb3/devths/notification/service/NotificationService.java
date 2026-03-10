@@ -30,6 +30,7 @@ public class NotificationService {
 
 	private final NotificationRepository notificationRepository;
 	private final UserRepository userRepository;
+	private final FcmService fcmService;
 
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public Notification createAnalysisCompleteNotification(User recipient, Long roomId, String summary) {
@@ -46,6 +47,9 @@ public class NotificationService {
 
 		Notification savedNotification = notificationRepository.save(notification);
 		log.info("분석 완료 알림 생성: recipientId={}, roomId={}", recipient.getId(), roomId);
+
+		fcmService.sendPushNotification(
+			recipient.getId(), "분석 완료", savedNotification.getContent(), savedNotification.getTargetPath());
 
 		return savedNotification;
 	}
@@ -65,6 +69,9 @@ public class NotificationService {
 
 		Notification savedNotification = notificationRepository.save(notification);
 		log.info("팔로우 알림 생성: recipientId={}, senderId={}", recipient.getId(), senderId);
+
+		fcmService.sendPushNotification(
+			recipient.getId(), "새 팔로워", savedNotification.getContent(), savedNotification.getTargetPath());
 
 		return savedNotification;
 	}
@@ -97,6 +104,9 @@ public class NotificationService {
 			previewContent == null ? 0 : previewContent.length()
 		);
 
+		fcmService.sendPushNotification(
+			recipient.getId(), "새 댓글", savedNotification.getContent(), savedNotification.getTargetPath());
+
 		return savedNotification;
 	}
 
@@ -127,6 +137,9 @@ public class NotificationService {
 			postId,
 			previewContent == null ? 0 : previewContent.length()
 		);
+
+		fcmService.sendPushNotification(
+			recipient.getId(), "새 답글", savedNotification.getContent(), savedNotification.getTargetPath());
 
 		return savedNotification;
 	}
