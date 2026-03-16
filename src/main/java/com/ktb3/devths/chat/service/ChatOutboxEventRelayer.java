@@ -1,8 +1,12 @@
 package com.ktb3.devths.chat.service;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageBuilder;
+import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,18 +39,17 @@ public class ChatOutboxEventRelayer {
 			String routingKey = resolveRoutingKey(event.getEventType());
 			Map<String, Object> headers = buildHeaders(event.getTraceContext());
 
-			rabbitTemplate.convertAndSend(
-				chatRabbitProperties.getExchange(),
-				routingKey,
-				event.getPayload(),
-				message -> {
-					headers.forEach((key, value) -> message.getMessageProperties().setHeader(key, value));
-					message.getMessageProperties().setHeader("eventType", event.getEventType().name());
-					message.getMessageProperties().setHeader("aggregateType", event.getAggregateType());
-					message.getMessageProperties().setHeader("aggregateId", event.getAggregateId());
-					return message;
-				}
-			);
+			Message message = MessageBuilder
+				.withBody(event.getPayload().getBytes(StandardCharsets.UTF_8))
+				.setContentType(MessageProperties.CONTENT_TYPE_JSON)
+				.build();
+
+			headers.forEach((key, value) -> message.getMessageProperties().setHeader(key, value));
+			message.getMessageProperties().setHeader("eventType", event.getEventType().name());
+			message.getMessageProperties().setHeader("aggregateType", event.getAggregateType());
+			message.getMessageProperties().setHeader("aggregateId", event.getAggregateId());
+
+			rabbitTemplate.send(chatRabbitProperties.getExchange(), routingKey, message);
 
 			event.markPublished();
 			chatOutboxEventRepository.save(event);
