@@ -42,6 +42,7 @@ dependencies {
     implementation 'io.opentelemetry:opentelemetry-exporter-otlp'
     implementation 'net.logstash.logback:logstash-logback-encoder:8.0'
     implementation 'org.springframework.boot:spring-boot-starter-websocket'
+    implementation 'org.springframework.boot:spring-boot-starter-amqp'
     implementation 'com.google.firebase:firebase-admin:9.8.0'
 
     // OpenTelemetry Manual Instrumentation for JDBC

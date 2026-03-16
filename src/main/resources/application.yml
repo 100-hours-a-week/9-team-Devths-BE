@@ -28,6 +28,21 @@ spring:
       ssl:
         enabled: ${REDIS_SSL:false}
 
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 10
+        retry:
+          enabled: true
+          max-attempts: 3
+
   security:
     oauth2:
       client:
@@ -121,6 +136,14 @@ chat:
   websocket:
     heartbeat-send-interval-ms: 25000
     heartbeat-receive-interval-ms: 25000
+  rabbitmq:
+    exchange: chat.events
+    message-queue: chat.message.queue
+    notification-queue: chat.notification.queue
+    message-dlq: chat.message.dlq
+    notification-dlq: chat.notification.dlq
+    message-routing-key: chat.message.broadcast
+    notification-routing-key: chat.notification.user
 
 app:
   cache:
