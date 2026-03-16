@@ -14,6 +14,8 @@ import com.ktb3.devths.chat.tracing.ChatTraceConstants;
 import com.ktb3.devths.global.util.LogSanitizer;
 import com.rabbitmq.client.Channel;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.tracing.BaggageInScope;
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.Tracer;
@@ -28,11 +30,13 @@ public class ChatNotificationRabbitConsumer {
 
 	private static final String TOPIC_PREFIX = "/topic/user/";
 	private static final String TOPIC_SUFFIX = "/notifications";
+	private static final String METRIC_STOMP_DELIVERED = "chat.stomp.delivered";
 
 	private final ObjectMapper objectMapper;
 	private final SimpMessagingTemplate messagingTemplate;
 	private final Tracer tracer;
 	private final Propagator propagator;
+	private final MeterRegistry meterRegistry;
 
 	@RabbitListener(queues = "${chat.rabbitmq.notification-queue}")
 	public void onMessage(Message message, Channel channel) throws Exception {
@@ -49,6 +53,10 @@ public class ChatNotificationRabbitConsumer {
 			sendWithFanoutSpan(aggregateId, notification);
 
 			channel.basicAck(deliveryTag, false);
+			Counter.builder(METRIC_STOMP_DELIVERED)
+				.tag("type", "notification")
+				.register(meterRegistry)
+				.increment();
 		} catch (Exception e) {
 			consumeSpan.error(e);
 			channel.basicNack(deliveryTag, false, true);

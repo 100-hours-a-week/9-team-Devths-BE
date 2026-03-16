@@ -15,6 +15,8 @@ import com.ktb3.devths.chat.tracing.ChatTraceConstants;
 import com.ktb3.devths.global.util.LogSanitizer;
 import com.rabbitmq.client.Channel;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.tracing.BaggageInScope;
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.Tracer;
@@ -28,11 +30,13 @@ import lombok.extern.slf4j.Slf4j;
 public class ChatMessageRabbitConsumer {
 
 	private static final String TOPIC_PREFIX = "/topic/chatroom/";
+	private static final String METRIC_STOMP_DELIVERED = "chat.stomp.delivered";
 
 	private final ObjectMapper objectMapper;
 	private final SimpMessagingTemplate messagingTemplate;
 	private final Tracer tracer;
 	private final Propagator propagator;
+	private final MeterRegistry meterRegistry;
 
 	@RabbitListener(queues = "${chat.rabbitmq.message-queue}")
 	public void onMessage(Message message, Channel channel) throws Exception {
@@ -54,6 +58,10 @@ public class ChatMessageRabbitConsumer {
 			}
 
 			channel.basicAck(deliveryTag, false);
+			Counter.builder(METRIC_STOMP_DELIVERED)
+				.tag("type", "message")
+				.register(meterRegistry)
+				.increment();
 		} catch (Exception e) {
 			consumeSpan.error(e);
 			channel.basicNack(deliveryTag, false, true);

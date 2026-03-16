@@ -20,6 +20,8 @@ import com.ktb3.devths.chat.dto.response.ChatRoomNotification;
 import com.ktb3.devths.chat.event.ChatOutboxCreatedEvent;
 import com.ktb3.devths.chat.repository.ChatOutboxEventRepository;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.propagation.Propagator;
@@ -34,11 +36,14 @@ public class ChatOutboxService {
 	private static final String AGGREGATE_CHAT_ROOM = "CHAT_ROOM";
 	private static final String AGGREGATE_CHAT_USER = "CHAT_USER";
 
+	private static final String METRIC_OUTBOX_CREATED = "chat.outbox.create.count";
+
 	private final ChatOutboxEventRepository chatOutboxEventRepository;
 	private final ObjectMapper objectMapper;
 	private final ApplicationEventPublisher applicationEventPublisher;
 	private final Tracer tracer;
 	private final Propagator propagator;
+	private final MeterRegistry meterRegistry;
 
 	public void createMessageEvent(Long roomId, ChatMessageResponse response, String chatSessionId) {
 		Span span = tracer.spanBuilder()
@@ -59,6 +64,7 @@ public class ChatOutboxService {
 				.build();
 
 			chatOutboxEventRepository.save(event);
+			incrementCreatedCounter(ChatOutboxEventType.CHAT_MESSAGE);
 			registerAfterCommitTrigger(List.of(event.getId()));
 		} catch (Exception e) {
 			span.error(e);
@@ -83,6 +89,7 @@ public class ChatOutboxService {
 				.build();
 
 			chatOutboxEventRepository.save(event);
+			incrementCreatedCounter(ChatOutboxEventType.CHAT_NOTIFICATION);
 			eventIds.add(event.getId());
 		}
 
@@ -99,7 +106,15 @@ public class ChatOutboxService {
 			.build();
 
 		chatOutboxEventRepository.save(event);
+		incrementCreatedCounter(ChatOutboxEventType.CHAT_MESSAGE_DELETED);
 		registerAfterCommitTrigger(List.of(event.getId()));
+	}
+
+	private void incrementCreatedCounter(ChatOutboxEventType eventType) {
+		Counter.builder(METRIC_OUTBOX_CREATED)
+			.tag("event_type", eventType.name())
+			.register(meterRegistry)
+			.increment();
 	}
 
 	private void registerAfterCommitTrigger(List<Long> eventIds) {
