@@ -57,7 +57,7 @@ public class ChatMessageService {
 	private final UserRepository userRepository;
 	private final S3AttachmentRepository s3AttachmentRepository;
 	private final S3StorageService s3StorageService;
-	private final RedisPublisher redisPublisher;
+	private final ChatOutboxService chatOutboxService;
 
 	@Transactional
 	public ChatMessageListResponse getChatMessages(Long userId, Long roomId, Integer size, Long lastId) {
@@ -164,14 +164,12 @@ public class ChatMessageService {
 
 		ChatMessageResponse response = buildResponse(chatMessage, sender);
 
-		redisPublisher.publish(request.roomId(), response, chatSessionId);
+		chatOutboxService.createMessageEvent(request.roomId(), response, chatSessionId);
 
 		ChatRoomNotification notification = new ChatRoomNotification(
 			request.roomId(), lastMessagePreview, chatMessage.getCreatedAt());
 		List<Long> memberUserIds = chatMemberRepository.findUserIdsByChatRoomId(request.roomId());
-		for (Long memberUserId : memberUserIds) {
-			redisPublisher.publishNotification(memberUserId, notification, chatSessionId);
-		}
+		chatOutboxService.createNotificationEvents(memberUserIds, notification, chatSessionId);
 
 		log.info("채팅 메시지 저장: roomId={}, senderId={}, type={}", request.roomId(), senderId, messageType);
 
@@ -206,9 +204,7 @@ public class ChatMessageService {
 			ChatRoomNotification notification = new ChatRoomNotification(
 				roomId, DELETED_MESSAGE_PREVIEW, message.getCreatedAt());
 			List<Long> memberUserIds = chatMemberRepository.findUserIdsByChatRoomId(roomId);
-			for (Long memberUserId : memberUserIds) {
-				redisPublisher.publishNotification(memberUserId, notification, DEFAULT_CHAT_SESSION_ID);
-			}
+			chatOutboxService.createNotificationEvents(memberUserIds, notification, DEFAULT_CHAT_SESSION_ID);
 		}
 
 		log.info("채팅 메시지 삭제: roomId={}, messageId={}", LogSanitizer.sanitize(String.valueOf(roomId)),
