@@ -1,9 +1,9 @@
 package com.ktb3.devths.chat.dto.internal;
 
-public record ChatRedisNotificationMeta(
+public record ChatMessageMeta(
 	String eventType,
-	Long userId,
 	Long roomId,
+	Long messageId,
 	String chatSessionId
 ) {
 }
