@@ -4,10 +4,17 @@
 
     <springProperty scope="context" name="applicationName" source="spring.application.name" defaultValue="devths"/>
 
-    <!-- Console Appender - 개발 환경에서 사람이 읽기 쉬운 형식 -->
+    <!-- Console Appender - Alloy가 stdout에서 수집 → JSON 형식으로 traceId/spanId 파싱 가능 -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{traceId:-},%X{spanId:-}] %-5level %logger{36} - %msg%n</pattern>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeMdcKeyName>traceId</includeMdcKeyName>
+            <includeMdcKeyName>spanId</includeMdcKeyName>
+            <customFields>{"application":"${applicationName}"}</customFields>
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <version>[ignore]</version>
+                <levelValue>[ignore]</levelValue>
+            </fieldNames>
         </encoder>
     </appender>
 
