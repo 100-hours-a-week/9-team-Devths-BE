@@ -28,7 +28,9 @@ public class TransactionMonitoringAspect {
 
 	private final ObservationRegistry observationRegistry;
 
-	@Around("@annotation(org.springframework.transaction.annotation.Transactional)")
+	@Around("@annotation(org.springframework.transaction.annotation.Transactional)"
+		+ " && !within(com.ktb3.devths.chat.service.ChatOutboxEventRelayer)"
+		+ " && !within(com.ktb3.devths.chat.service.ChatOutboxRelayService)")
 	public Object monitorTransaction(ProceedingJoinPoint joinPoint) throws Throwable {
 		MethodSignature signature = (MethodSignature)joinPoint.getSignature();
 		Method method = signature.getMethod();
